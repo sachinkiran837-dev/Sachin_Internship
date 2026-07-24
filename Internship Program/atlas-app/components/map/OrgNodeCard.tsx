@@ -12,6 +12,11 @@ export interface OrgNodeData extends Record<string, unknown> {
   onToggleExpand: (id: string) => void;
 }
 
+function currency(n: number): string {
+  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
+  return `$${Math.round(n)}`;
+}
+
 export function OrgNodeCard({ data }: NodeProps) {
   const { position: p, dimmed, hasChildren, expanded, onToggleExpand } = data as OrgNodeData;
 
@@ -20,20 +25,26 @@ export function OrgNodeCard({ data }: NodeProps) {
       ? "border-amber-400"
       : p.flags.spanHealth === "wide"
         ? "border-rose-400"
-        : "border-border";
+        : p.flags.protected
+          ? "border-destructive/50"
+          : "border-border";
 
   return (
     <div
-      className={`w-[220px] rounded-lg border-2 bg-card px-3 py-2 shadow-sm transition-opacity ${spanColor} ${
+      className={`w-[240px] rounded-lg border-2 bg-card px-3 py-2.5 shadow-sm transition-opacity ${spanColor} ${
         dimmed ? "opacity-30" : "opacity-100"
       }`}
     >
       <Handle type="target" position={RFPosition.Top} className="!bg-muted-foreground" />
-      <div className="flex items-start justify-between gap-1">
+      <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{p.title}</p>
+          <p className="truncate text-sm font-semibold leading-tight text-foreground">{p.title}</p>
           <p className="truncate text-xs text-muted-foreground">{p.displayName}</p>
-          <p className="truncate text-xs text-muted-foreground">{p.department}</p>
+          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="truncate">{p.department}</span>
+            <span aria-hidden>·</span>
+            <span className="shrink-0 tabular-nums">{currency(p.cost * p.fte)}</span>
+          </div>
         </div>
         {hasChildren && (
           <button
@@ -42,39 +53,46 @@ export function OrgNodeCard({ data }: NodeProps) {
               e.stopPropagation();
               onToggleExpand(p.id);
             }}
-            className="shrink-0 rounded border px-1.5 text-xs hover:bg-accent"
+            className="shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
+            aria-label={expanded ? "Collapse team" : `Expand ${p.childIds.length} direct report${p.childIds.length === 1 ? "" : "s"}`}
           >
-            {expanded ? "−" : "+"}
+            {expanded ? "−" : `+${p.childIds.length}`}
           </button>
         )}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {p.flags.protected && (
-          <Badge variant="destructive" className="text-[10px]">
-            {p.flags.protected.tier}
-          </Badge>
-        )}
-        {p.flags.vacant && (
-          <Badge variant="outline" className="text-[10px]">
-            vacant
-          </Badge>
-        )}
-        {p.flags.contingent && (
-          <Badge variant="outline" className="text-[10px]">
-            contingent
-          </Badge>
-        )}
-        {p.flags.singleReport && (
-          <Badge variant="secondary" className="text-[10px]">
-            single-report
-          </Badge>
-        )}
-        {p.flags.keyPerson && (
-          <Badge variant="secondary" className="text-[10px]">
-            key person
-          </Badge>
-        )}
-      </div>
+      {(p.flags.protected ||
+        p.flags.vacant ||
+        p.flags.contingent ||
+        p.flags.singleReport ||
+        p.flags.keyPerson) && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {p.flags.protected && (
+            <Badge variant="destructive" className="text-[10px]">
+              {p.flags.protected.tier}
+            </Badge>
+          )}
+          {p.flags.vacant && (
+            <Badge variant="outline" className="text-[10px]">
+              vacant
+            </Badge>
+          )}
+          {p.flags.contingent && (
+            <Badge variant="secondary" className="text-[10px]">
+              contingent
+            </Badge>
+          )}
+          {p.flags.singleReport && (
+            <Badge variant="secondary" className="text-[10px]">
+              single-report
+            </Badge>
+          )}
+          {p.flags.keyPerson && (
+            <Badge variant="secondary" className="text-[10px]">
+              key person
+            </Badge>
+          )}
+        </div>
+      )}
       <Handle type="source" position={RFPosition.Bottom} className="!bg-muted-foreground" />
     </div>
   );

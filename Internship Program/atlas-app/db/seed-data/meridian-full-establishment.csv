@@ -1,0 +1,154 @@
+Position ID,Employee Name,Position Title,Department,Manager ID,Fully Loaded Cost,FTE,Status
+P001,Olivia Chen,Chief Executive Officer,Executive,,430000,1,Filled
+P002,Liam Solberg,Chief Financial Officer,Finance,P001,"$325,000",1.0,filled
+P003,Amara Dela Cruz,Chief Operating Officer,Clinical Operations,P001,325000.00,0.8,FILLED
+P004,  Noah   Karim  ,Company Secretary,Executive,P001,AUD 215000,0.6,Filled 
+P005,Priya Faleolo,Chief People Officer,People & Culture,P001,"285,000",1,Filled
+P006,ETHAN VERMA,IT Manager,Corporate Services,P001,178000,0.5,filled
+P007,Zainab Fitzgerald,Chief Safety Officer,Clinical Operations,P003,"$228,000",1,FILLED
+P008,Lucas Ibrahim,Clinical Director,Clinical Operations,P003,262000.00,1,Filled 
+P009,freya andersen,Operations Manager,Facilities,P003,AUD 172000,1.0,Filled
+P010,Kai Zhao,Patient Services Manager,Clinical Operations,P003,"160,000",0.8,filled
+P011,"Mensah, Isabella",Patient Services Manager,Clinical Operations,P003,158000,0.6,FILLED
+P012,Mateo Nguyen,Director of Nursing,Clinical Operations,P008,"$232,000",1,Filled 
+P013,Aisha Rossi,Clinical Coordinator,Clinical Operations,P008,137000.00,0.5,Filled
+P014,Jack Osei,Clinical Educator,Clinical Operations,P013,AUD 119000,1,filled
+P015,Chidi Hassan,Clinical Educator,Clinical Operations,P013,"118,000",1,FILLED
+P016,  Grace   Hussain  ,Allied Health Lead,Clinical Operations,P013,128000,1.0,Filled 
+P017,Rohan Esposito,Physiotherapy Assistant,Clinical Operations,P016,"$78,000",0.8,Filled
+P018,MIA OKAFOR,Physiotherapy Assistant,Clinical Operations,P016,79000.00,0.6,filled
+P019,Tane Novak,Physiotherapy Assistant,Clinical Operations,P016,AUD 80000,1,FILLED
+P020,Sofia Patel,Nurse Unit Manager,Clinical Operations,P012,"168,000",0.5,Filled 
+P021,hana silva,Enrolled Nurse,Clinical Operations,P020,82000,1,Filled
+P022,Omar Ah Kuoi,Personal Care Assistant,Clinical Operations,P020,"$68,500",1,filled
+P023,"Wilson, Ingrid",Registered Nurse,Clinical Operations,P020,98000.00,1.0,FILLED
+P024,Diego Kaur,Registered Nurse,Clinical Operations,P020,AUD 98500,0.8,Filled 
+P025,Layla Fernandez,Registered Nurse,Clinical Operations,P020,"97,000",0.6,Filled
+P026,Finn Ngata,Enrolled Nurse,Clinical Operations,P020,82500,1,filled
+P027,Mei O'Brien,Personal Care Assistant,Clinical Operations,P020,"$69,000",0.5,FILLED
+P028,  Owen   Bianchi  ,Registered Nurse,Clinical Operations,P020,98500.00,1,Filled 
+P029,Nadia Rangi,Registered Nurse,Clinical Operations,P020,AUD 97000,1,Filled
+P030,THEO AL-AMIN,Registered Nurse,Clinical Operations,P020,"97,500",1.0,filled
+P031,Aroha Whitfield,Enrolled Nurse,Clinical Operations,P020,83000,0.8,FILLED
+P032,Sione Kobayashi,Personal Care Assistant,Clinical Operations,P020,"$69,500",0.6,Filled 
+P033,ruby brooks,Nurse Unit Manager,Clinical Operations,P012,169000.00,1,Filled
+P034,Kofi Kowalski,Registered Nurse,Clinical Operations,P033,AUD 97000,0.5,filled
+P035,"O'Sullivan, Elena",Registered Nurse,Clinical Operations,P033,"97,500",1,FILLED
+P036,Marco Tamati,Registered Nurse,Clinical Operations,P033,98000,1,Filled 
+P037,Vacant,Enrolled Nurse,Clinical Operations,P033,"$83,500",1.0,vacant
+P038,Yuki Campbell,Personal Care Assistant,Clinical Operations,P033,68000.00,0.8,Filled
+P039,Sam Murphy,Registered Nurse,Clinical Operations,P033,AUD 97500,0.6,filled
+P040,Anika Papadopoulos,Registered Nurse,Clinical Operations,P033,"98,000",1,FILLED
+P041,  Wiremu   Tanaka  ,Registered Nurse,Clinical Operations,P033,98500,0.5,Filled 
+P042,Chloe Chen,Enrolled Nurse,Clinical Operations,P033,"$82,000",1,Filled
+P043,RAVI SOLBERG,Personal Care Assistant,Clinical Operations,P033,68500.00,1,filled
+P044,Fatima Dela Cruz,Registered Nurse,Clinical Operations,P033,AUD 98000,1.0,FILLED
+P045,Callum Karim,Nurse Unit Manager,Clinical Operations,P012,"170,000",0.8,Filled 
+P046,ngozi faleolo,Registered Nurse,Clinical Operations,P045,97000,0.6,Filled
+P047,Bianca Verma,Enrolled Nurse,Clinical Operations,P045,"$82,500",1,filled
+P048,"Fitzgerald, Ahmad",Personal Care Assistant,Clinical Operations,P045,69000.00,0.5,FILLED
+P049,Talia Ibrahim,Registered Nurse,Clinical Operations,P045,AUD 98500,1,Filled 
+P050,Jonas Andersen,Registered Nurse,Clinical Operations,P045,"97,000",1,Filled
+P051,Mele Zhao,Registered Nurse,Clinical Operations,P045,97500,1.0,filled
+P052,Olivia Mensah,Enrolled Nurse,Clinical Operations,P045,"$83,000",0.8,FILLED
+P053,  Liam   Nguyen  ,Personal Care Assistant,Clinical Operations,P045,69500.00,0.6,Filled 
+P054,Amara Rossi,Registered Nurse,Clinical Operations,P045,AUD 97000,1,Filled
+P055,NOAH OSEI,Registered Nurse,Clinical Operations,P045,"97,500",0.5,filled
+P056,Priya Hassan,Nurse Unit Manager,Clinical Operations,P012,171000,1,FILLED
+P057,Ethan Hussain,Personal Care Assistant,Clinical Operations,P056,"$68,000",1,Filled 
+P058,zainab esposito,Registered Nurse,Clinical Operations,P056,97500.00,1.0,Filled
+P059,Lucas Okafor,Registered Nurse,Clinical Operations,P056,AUD 98000,0.8,filled
+P060,"Novak, Freya",Nurse Unit Manager,Clinical Operations,P012,"172,000",0.6,FILLED
+P061,Kai Patel,Registered Nurse,Clinical Operations,P060,97000,1,Filled 
+P062,Isabella Silva,Registered Nurse,Clinical Operations,P060,"$97,500",0.5,Filled
+P063,Mateo Ah Kuoi,Enrolled Nurse,Clinical Operations,P060,83000.00,1,filled
+P064,Aisha Wilson,Personal Care Assistant,Clinical Operations,P060,AUD 69500,1,FILLED
+P065,  Jack   Kaur  ,Registered Nurse,Clinical Operations,P060,"97,000",1.0,Filled 
+P066,Chidi Fernandez,Registered Nurse,Clinical Operations,P060,97500,0.8,Filled
+P067,GRACE NGATA,Registered Nurse,Clinical Operations,P060,"$98,000",0.6,filled
+P068,Rohan O'Brien,Enrolled Nurse,Clinical Operations,P060,83500.00,1,FILLED
+P069,Mia Bianchi,Personal Care Assistant,Clinical Operations,P060,AUD 68000,0.5,Filled 
+P070,tane rangi,Registered Nurse,Clinical Operations,P060,"97,500",1,Filled
+P071,Sofia Al-Amin,Registered Nurse,Clinical Operations,P060,98000,1,filled
+P072,"Whitfield, Hana",Registered Nurse,Clinical Operations,P060,"$98,500",1.0,FILLED
+P073,Omar Kobayashi,Enrolled Nurse,Clinical Operations,P060,82000.00,0.8,Filled 
+P074,Ingrid Brooks,Nurse Unit Manager,Clinical Operations,P012,AUD 173000,0.6,Filled
+P075,Diego Kowalski,Enrolled Nurse,Clinical Operations,P074,"82,000",1,filled
+P076,Layla O'Sullivan,Personal Care Assistant,Clinical Operations,P074,68500,0.5,FILLED
+P077,  Finn   Tamati  ,Registered Nurse,Clinical Operations,P074,"$98,000",1,Filled 
+P078,Mei Campbell,Registered Nurse,Clinical Operations,P074,98500.00,1,Filled
+P079,OWEN MURPHY,Registered Nurse,Clinical Operations,P074,AUD 97000,1.0,filled
+P080,Nadia Papadopoulos,Enrolled Nurse,Clinical Operations,P074,"82,500",0.8,FILLED
+P081,Theo Tanaka,Personal Care Assistant,Clinical Operations,P074,69000,0.6,Filled 
+P082,aroha chen,Registered Nurse,Clinical Operations,P074,"$98,500",1,Filled
+P083,Sione Solberg,Registered Nurse,Clinical Operations,P074,97000.00,0.5,filled
+P084,"Dela Cruz, Ruby",Agency Nursing Coordinator,Clinical Operations,P012,AUD 142000,1,FILLED
+P085,Kofi Karim,Agency Registered Nurse,Clinical Operations,P084,"108,000",1,Contract
+P086,Elena Faleolo,Agency Registered Nurse,Clinical Operations,P084,109500,1.0,contingent
+P087,Marco Verma,Agency Registered Nurse,Clinical Operations,P084,"$111,000",0.8,Contingent
+P088,Yuki Fitzgerald,Agency Registered Nurse,Clinical Operations,P084,108000.00,0.6,Contract
+P089,  Sam   Ibrahim  ,Agency Registered Nurse,Clinical Operations,P084,AUD 109500,1,contingent
+P090,Anika Andersen,Agency Registered Nurse,Clinical Operations,P084,"111,000",0.5,Contingent
+P091,WIREMU ZHAO,Agency Registered Nurse,Clinical Operations,P084,108000,1,Contract
+P092,Chloe Mensah,Agency Registered Nurse,Clinical Operations,P084,"$109,500",1,contingent
+P093,Ravi Nguyen,Patient Services Officer,Clinical Operations,P010,72000.00,1.0,Filled 
+P094,fatima rossi,Patient Services Officer,Clinical Operations,P010,AUD 72500,0.8,Filled
+P095,Callum Osei,Patient Services Officer,Clinical Operations,P010,"73,000",0.6,filled
+P096,"Hassan, Ngozi",Patient Services Officer,Clinical Operations,P010,72000,1,FILLED
+P097,Bianca Hussain,Patient Services Officer,Clinical Operations,P010,"$72,500",0.5,Filled 
+P098,Ahmad Esposito,Patient Services Officer,Clinical Operations,P010,73000.00,1,Filled
+P099,Talia Okafor,Patient Services Officer,Clinical Operations,P010,AUD 72000,1,filled
+P100,Jonas Novak,Patient Services Officer,Clinical Operations,P010,"72,500",1.0,FILLED
+P101,  Mele   Patel  ,Patient Services Officer,Clinical Operations,P010,73000,0.8,Filled 
+P102,Olivia Silva,Patient Services Officer,Clinical Operations,P010,"$72,000",0.6,Filled
+P103,LIAM AH KUOI,Patient Services Officer,Clinical Operations,P011,72000.00,1,filled
+P104,Amara Wilson,Patient Services Officer,Clinical Operations,P011,AUD 72500,0.5,FILLED
+P105,Noah Kaur,Patient Services Officer,Clinical Operations,P011,"73,000",1,Filled 
+P106,priya fernandez,Patient Services Officer,Clinical Operations,P011,72000,1,Filled
+P107,Ethan Ngata,Patient Services Officer,Clinical Operations,P011,"$72,500",1.0,filled
+P108,"O'Brien, Zainab",Patient Services Officer,Clinical Operations,P011,73000.00,0.8,FILLED
+P109,Lucas Bianchi,Patient Services Officer,Clinical Operations,P011,AUD 72000,0.6,Filled 
+P110,Freya Rangi,Patient Services Officer,Clinical Operations,P011,"72,500",1,Filled
+P111,Kai Al-Amin,Patient Services Officer,Clinical Operations,P011,73000,0.5,filled
+P112,Isabella Whitfield,Facilities Coordinator,Facilities,P009,"$89,000",1,FILLED
+P113,  Mateo   Kobayashi  ,Facilities Technician,Facilities,P112,77000.00,1,Filled 
+P114,Aisha Brooks,Facilities Technician,Facilities,P112,AUD 77500,1.0,Filled
+P115,JACK KOWALSKI,Facilities Technician,Facilities,P112,"78,000",0.8,filled
+P116,Chidi O'Sullivan,Cleaning Contractor,Facilities,P112,58000,0.6,Contingent
+P117,Grace Tamati,Cleaning Contractor,Facilities,P112,"$59,000",1,Contingent
+P118,rohan campbell,Cleaning Contractor,Facilities,P112,58000.00,0.5,Contingent
+P119,Mia Murphy,Cleaning Contractor,Facilities,P112,AUD 59000,1,Contingent
+P120,"Papadopoulos, Tane",Cleaning Contractor,Facilities,P112,"58,000",1,Contingent
+P121,Sofia Tanaka,Cleaning Contractor,Facilities,P112,59000,1.0,Contingent
+P122,Hana Chen,Catering Manager,Facilities,P009,"$96,000",0.8,FILLED
+P123,Omar Solberg,Kitchen Hand,Facilities,P122,55000.00,0.6,Filled 
+P124,Ingrid Dela Cruz,Hospitality Assistant,Facilities,P122,AUD 55400,1,Filled
+P125,  Diego   Karim  ,Kitchen Hand,Facilities,P122,"55,800",0.5,filled
+P126,Layla Faleolo,Hospitality Assistant,Facilities,P122,56200,1,FILLED
+P127,FINN VERMA,Kitchen Hand,Facilities,P122,"$56,600",1,Filled 
+P128,Mei Fitzgerald,Hospitality Assistant,Facilities,P122,57000.00,1.0,Filled
+P129,Owen Ibrahim,Security Coordinator,Facilities,P009,AUD 91000,0.8,filled
+P130,nadia andersen,Security Contractor,Facilities,P129,"62,000",0.6,contract
+P131,Theo Zhao,Security Contractor,Facilities,P129,62500,1,contract
+P132,"Mensah, Aroha",Security Contractor,Facilities,P129,"$63,000",0.5,contract
+P133,Sione Nguyen,Security Contractor,Facilities,P129,63500.00,1,contract
+P134,Ruby Rossi,Maintenance Contractor,Facilities,P009,AUD 64000,1,Contingent
+P135,Kofi Osei,Maintenance Contractor,Facilities,P009,"64,500",1.0,Contingent
+P136,Elena Hassan,Maintenance Contractor,Facilities,P009,65000,0.8,Contingent
+P137,  Marco   Hussain  ,HR Business Partner,People & Culture,P005,"$146,000",0.6,FILLED
+P138,Yuki Esposito,Recruitment Lead,People & Culture,P005,133000.00,1,Filled 
+P139,SAM OKAFOR,Learning & Development Coordinator,People & Culture,P005,AUD 99000,0.6,Filled
+P140,Anika Novak,Privacy Officer,People & Culture,P005,"121,000",0.5,filled
+P141,Wiremu Patel,Finance Director,Finance,P002,241000,1,FILLED
+P142,chloe silva,Financial Controller,Finance,P141,"$191,000",1,Filled 
+P143,Ravi Ah Kuoi,Accounts Payable Lead,Finance,P142,106000.00,1.0,Filled
+P144,"Wilson, Fatima",Payroll Officer,Finance,P142,AUD 99000,0.8,filled
+P145,Callum Kaur,Finance Analyst,Finance,P142,"103,000",0.6,FILLED
+P146,Ngozi Fernandez,Finance Analyst,Finance,P142,103500,1,Filled 
+P147,Bianca Ngata,Finance Analyst,Finance,P142,"$104,000",0.5,Filled
+P148,Ahmad O'Brien,IT Support Officer,Corporate Services,P006,79000.00,1,filled
+P149,  Talia   Bianchi  ,IT Support Officer,Corporate Services,P006,AUD 79500,1,FILLED
+P150,Jonas Rangi,IT Support Officer,Corporate Services,P006,"80,000",1.0,Filled 
+P076,MELE AL-AMIN,Registered Nurse,Clinical Operations,P012,97500,1,Filled
+P151,Olivia Whitfield,Registered Nurse,Clinical Operations,P900,"$96,500",1,Filled
+P152,Liam Kobayashi,Cleaning Contractor,Facilities,Isabella Whitfield,57500.00,1,Contingent

@@ -15,13 +15,16 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { tagNodes } from "@/lib/graph/tagging";
+import { computeVisibleLayout } from "@/lib/graph/layout";
 import { getAncestorIds, getDescendantIds } from "@/lib/graph/descendants";
 import { nearestCandidate } from "@/lib/graph/hitTest";
 import type { Position } from "@/lib/graph/types";
 import { reassignPosition } from "@/lib/scenario/mutate";
 import { OrgNodeCard, type OrgNodeData } from "./OrgNodeCard";
 import { DetailPanel } from "./DetailPanel";
+import { MapLegend } from "./MapLegend";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const nodeTypes = { orgNode: OrgNodeCard };
 const MAX_DROP_DISTANCE = 300;
@@ -92,7 +95,7 @@ function EstablishmentMapInner({
   const [error, setError] = useState<string | null>(null);
   const [dragOverride, setDragOverride] = useState<{ id: string; x: number; y: number } | null>(null);
   const [, startTransition] = useTransition();
-  const { setCenter } = useReactFlow();
+  const { setCenter, fitView } = useReactFlow();
 
   const matches = useMemo(() => {
     const hasFilter = filterDept !== "all" || filterFlag !== "all" || search.trim() !== "";
@@ -142,16 +145,6 @@ function EstablishmentMapInner({
     return next;
   }, [expandedIds, ancestorsOfMatches]);
 
-  // Search flies the view to the first hit — an imperative call to the
-  // canvas's own camera API, not a state sync, so it belongs in an effect.
-  useEffect(() => {
-    if (search.trim() === "" || matches.size === 0) return;
-    const firstId = [...matches][0];
-    const node = byId.get(firstId);
-    if (node) setCenter(node.x + 110, node.y + 40, { zoom: 1, duration: 500 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
   const visibleIds = useMemo(() => {
     const visible = new Set<string>();
     function visit(id: string) {
@@ -164,6 +157,25 @@ function EstablishmentMapInner({
     return visible;
   }, [byId, effectiveExpandedIds, rootId]);
 
+  // Positions scoped to what's actually visible — a collapsed node never
+  // reserves the horizontal width of its hidden subtree (see
+  // computeVisibleLayout). This is what keeps the canvas compact regardless
+  // of how large the underlying org is.
+  const visibleLayout = useMemo(
+    () => computeVisibleLayout(layoutNodes, rootId, visibleIds, effectiveExpandedIds),
+    [layoutNodes, rootId, visibleIds, effectiveExpandedIds]
+  );
+
+  // Search flies the view to the first hit — an imperative call to the
+  // canvas's own camera API, not a state sync, so it belongs in an effect.
+  useEffect(() => {
+    if (search.trim() === "" || matches.size === 0) return;
+    const firstId = [...matches][0];
+    const pos = visibleLayout.get(firstId);
+    if (pos) setCenter(pos.x + 110, pos.y + 40, { zoom: 1, duration: 500 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -173,9 +185,31 @@ function EstablishmentMapInner({
     });
   }, []);
 
+  // Bulk actions re-fit the camera afterward — a deliberate click on "expand
+  // all"/"collapse to top" means the visible extent just changed a lot, so
+  // the view should follow. A single per-node toggle deliberately does not
+  // do this (it would fight the search fly-to and be disorienting while
+  // incrementally exploring one branch).
+  const expandAll = useCallback(() => {
+    setExpandedIds(new Set(layoutNodes.filter((n) => n.childIds.length > 0).map((n) => n.id)));
+    setTimeout(() => fitView({ duration: 400, padding: 0.2 }), 50);
+  }, [layoutNodes, fitView]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedIds(rootId ? new Set([rootId]) : new Set());
+    setTimeout(() => fitView({ duration: 400, padding: 0.2 }), 50);
+  }, [rootId, fitView]);
+
+  const resetFilters = useCallback(() => {
+    setFilterDept("all");
+    setFilterFlag("all");
+    setSearch("");
+  }, []);
+
   const layoutRfNodes = useMemo<Node[]>(() => {
     return [...visibleIds].map((id) => {
       const n = byId.get(id)!;
+      const pos = visibleLayout.get(id) ?? { x: n.x, y: n.y };
       const dimmed = hasActiveFilter && !matches.has(id) && !ancestorsOfMatches.has(id);
       const data: OrgNodeData = {
         position: n,
@@ -187,12 +221,22 @@ function EstablishmentMapInner({
       return {
         id,
         type: "orgNode",
-        position: { x: n.x, y: n.y },
+        position: pos,
         data,
         draggable: id !== rootId,
       };
     });
-  }, [visibleIds, byId, hasActiveFilter, matches, ancestorsOfMatches, effectiveExpandedIds, toggleExpand, rootId]);
+  }, [
+    visibleIds,
+    byId,
+    visibleLayout,
+    hasActiveFilter,
+    matches,
+    ancestorsOfMatches,
+    effectiveExpandedIds,
+    toggleExpand,
+    rootId,
+  ]);
 
   // Only the actively-dragged node's position is overridden for the
   // duration of the gesture; everything else always renders at its
@@ -264,44 +308,97 @@ function EstablishmentMapInner({
   const team = selectedNode ? computeTeamSize(positions, selectedNode.id) : { size: 0, cost: 0 };
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-        <Input
-          placeholder="Search title or name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-56"
-        />
-        <select
-          className="rounded-md border border-input bg-transparent px-2 py-1.5 text-sm"
-          value={filterDept}
-          onChange={(e) => setFilterDept(e.target.value)}
-        >
-          <option value="all">All departments</option>
-          {departments.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-        <select
-          className="rounded-md border border-input bg-transparent px-2 py-1.5 text-sm"
-          value={filterFlag}
-          onChange={(e) => setFilterFlag(e.target.value)}
-        >
-          <option value="all">All flags</option>
-          <option value="protected">Protected</option>
-          <option value="vacant">Vacant</option>
-          <option value="contingent">Contingent</option>
-          <option value="thin">Thin span</option>
-          <option value="wide">Wide span</option>
-          <option value="singleReport">Single-report</option>
-          <option value="keyPerson">Key person</option>
-        </select>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="flex flex-wrap items-end gap-3 border-b bg-background px-4 py-2.5">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="map-search" className="text-xs text-muted-foreground">
+            Search
+          </Label>
+          <Input
+            id="map-search"
+            placeholder="Title or name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-56"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="map-dept" className="text-xs text-muted-foreground">
+            Department
+          </Label>
+          <select
+            id="map-dept"
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            value={filterDept}
+            onChange={(e) => setFilterDept(e.target.value)}
+          >
+            <option value="all">All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="map-flag" className="text-xs text-muted-foreground">
+            Flag
+          </Label>
+          <select
+            id="map-flag"
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            value={filterFlag}
+            onChange={(e) => setFilterFlag(e.target.value)}
+          >
+            <option value="all">All flags</option>
+            <option value="protected">Protected</option>
+            <option value="vacant">Vacant</option>
+            <option value="contingent">Contingent</option>
+            <option value="thin">Thin span</option>
+            <option value="wide">Wide span</option>
+            <option value="singleReport">Single-report</option>
+            <option value="keyPerson">Key person</option>
+          </select>
+        </div>
+
+        {hasActiveFilter && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">
+              {matches.size} match{matches.size === 1 ? "" : "es"}
+            </span>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-9 rounded-md border border-input px-2 text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        <div className="ml-auto flex items-end gap-2">
+          <button
+            type="button"
+            onClick={expandAll}
+            className="h-9 rounded-md border border-input px-3 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            Expand all
+          </button>
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="h-9 rounded-md border border-input px-3 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            Collapse to top
+          </button>
+        </div>
+
+        {error && <p className="w-full text-sm text-destructive">{error}</p>}
       </div>
 
-      <div className="relative flex-1">
+      <MapLegend />
+
+      <div className="relative flex-1 min-h-0">
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}

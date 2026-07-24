@@ -60,7 +60,7 @@ export function DetailPanel({
 
               <div className="flex flex-wrap gap-1">
                 {node.flags.vacant && <Badge variant="outline">vacant</Badge>}
-                {node.flags.contingent && <Badge variant="outline">contingent</Badge>}
+                {node.flags.contingent && <Badge variant="secondary">contingent</Badge>}
                 {node.flags.singleReport && <Badge variant="secondary">single-report chain</Badge>}
                 {node.flags.keyPerson && <Badge variant="secondary">key person</Badge>}
                 {node.flags.spanHealth !== "healthy" && (

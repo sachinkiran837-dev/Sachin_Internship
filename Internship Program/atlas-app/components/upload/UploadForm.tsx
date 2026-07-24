@@ -23,7 +23,8 @@ export function UploadForm() {
           className="size-4 rounded border-input"
         />
         <Label htmlFor="useSample">
-          Use the synthetic demo export (Meridian Health Services, fictional data)
+          Use the synthetic demo export (Meridian Health Services, ~150 positions, fictional
+          data — heavy on frontline nursing/care and contractor roles, with realistic messiness)
         </Label>
       </div>
 

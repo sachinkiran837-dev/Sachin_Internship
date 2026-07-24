@@ -1,4 +1,4 @@
-import type { Position } from "./types";
+import type { LayoutNode, Position } from "./types";
 
 export const NODE_WIDTH = 260;
 export const ROW_HEIGHT = 160;
@@ -67,6 +67,50 @@ export function computeLayout(
       cursor += 1;
       result.set(p.id, { x, y: 0, depth: 0, childIds: childrenOf.get(p.id) ?? [] });
     }
+  }
+
+  return result;
+}
+
+/**
+ * A second layout pass scoped to what's actually on screen. `computeLayout`
+ * walks the FULL tree, so a collapsed node's x-position still reserves the
+ * width of its entire hidden subtree — with a large or wide-spanning org,
+ * that leaves the visible nodes scattered across a mostly-empty canvas. This
+ * recomputes positions treating a collapsed (or leaf) node as a leaf for
+ * x-cursor purposes regardless of how many real descendants it has, so the
+ * canvas only ever spends width on what's actually rendered.
+ */
+export function computeVisibleLayout(
+  nodes: LayoutNode[],
+  rootId: string | null,
+  visibleIds: Set<string>,
+  expandedIds: Set<string>
+): Map<string, { x: number; y: number }> {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const result = new Map<string, { x: number; y: number }>();
+  let cursor = 0;
+
+  function visit(id: string, depth: number): number {
+    const node = byId.get(id);
+    const visibleChildIds = (node?.childIds ?? []).filter((c) => visibleIds.has(c));
+    const shouldRecurse = expandedIds.has(id) && visibleChildIds.length > 0;
+
+    if (!shouldRecurse) {
+      const x = cursor * NODE_WIDTH;
+      cursor += 1;
+      result.set(id, { x, y: depth * ROW_HEIGHT });
+      return x;
+    }
+
+    const childXs = visibleChildIds.map((childId) => visit(childId, depth + 1));
+    const x = (Math.min(...childXs) + Math.max(...childXs)) / 2;
+    result.set(id, { x, y: depth * ROW_HEIGHT });
+    return x;
+  }
+
+  if (rootId && visibleIds.has(rootId)) {
+    visit(rootId, 0);
   }
 
   return result;

@@ -24,9 +24,9 @@ export async function ingestFileAction(
 
   try {
     if (useSample || !file || file.size === 0) {
-      filename = "sample-establishment.csv";
+      filename = "meridian-full-establishment.csv";
       buffer = await readFile(
-        path.join(process.cwd(), "db", "seed-data", "sample-establishment.csv")
+        path.join(process.cwd(), "db", "seed-data", "meridian-full-establishment.csv")
       );
     } else {
       filename = file.name;

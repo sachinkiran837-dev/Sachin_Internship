@@ -13,7 +13,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, tick "use the synthetic demo export" (a fictional org, Meridian Health Services, at `db/seed-data/sample-establishment.csv`), and ingest it. From there: confirm the ingest, open the establishment map, drag a role to reassign it, model a typed scenario move, and read the findings.
+Open http://localhost:3000, tick "use the synthetic demo export" (a fictional org, Meridian Health Services, ~150 positions at `db/seed-data/meridian-full-establishment.csv` — heavy on frontline nursing/care and contractor roles, with realistic messiness: mixed casing, currency formats, a duplicate ID and an orphan record that the ingest-confirm screen surfaces), and ingest it. From there: confirm the ingest, open the establishment map, drag a role to reassign it, model a typed scenario move, and read the findings.
+
+A smaller, clean 45-row fixture (`db/seed-data/sample-establishment.csv`) still exists purely for `scripts/verify-pipeline.ts`'s exact-count assertions — it isn't wired into the UI. Regenerate the full dataset with `npx tsx scripts/generate-meridian-full.ts`.
 
 `npm run build` and `npm run typecheck` both run clean. `npm run dev`/`npm run build` apply any pending database migrations automatically first (`predev`/`prebuild` hooks run `drizzle-kit migrate`).
 
