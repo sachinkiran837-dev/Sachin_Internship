@@ -1,0 +1,46 @@
+Position ID,Employee Name,Position Title,Department,Manager ID,Fully Loaded Cost,FTE,Status
+P001,Alexandra Reyes,Chief Executive Officer,Executive,,420000,1,Filled
+P002,Marcus Chen,Chief Financial Officer,Finance,P001,320000,1,Filled
+P003,Priya Nair,Chief Operating Officer,Clinical Operations,P001,320000,1,Filled
+P004,Helen O Dalaigh,Company Secretary,Executive,P001,210000,1,Filled
+P005,David Okafor,Chief People Officer,People & Culture,P001,280000,1,Filled
+P006,Grace Kim,Finance Director,Finance,P002,240000,1,Filled
+P007,Tom Whitfield,Financial Controller,Finance,P006,190000,1,Filled
+P008,Nadia Hussain,Accounts Payable Lead,Finance,P007,105000,1,Filled
+P009,Ben Sorensen,Payroll Officer,Finance,P007,98000,1,Filled
+P010,Chloe Martins,Finance Analyst,Finance,P007,102000,1,Filled
+P011,Rohan Patel,Finance Analyst,Finance,P007,102000,1,Filled
+P012,Wei Zhang,Chief Safety Officer,Clinical Operations,P003,225000,1,Filled
+P013,Fatima Al-Sayed,Clinical Director,Clinical Operations,P003,260000,1,Filled
+P014,Isabelle Laurent,Director of Nursing,Clinical Operations,P013,230000,1,Filled
+P015,Samuel Osei,Nurse Unit Manager,Clinical Operations,P014,165000,1,Filled
+P016,Lucia Fernandez,Registered Nurse,Clinical Operations,P015,96000,1,Filled
+P017,Grace dela Cruz,Registered Nurse,Clinical Operations,P015,96000,1,Filled
+P018,Ahmed Karim,Registered Nurse,Clinical Operations,P015,96000,0.8,Filled
+P019,Vacant,Registered Nurse,Clinical Operations,P015,96000,1,Vacant
+P020,Olivia Bennett,Nurse Unit Manager,Clinical Operations,P014,165000,1,Filled
+P021,Ingrid Solberg,Registered Nurse,Clinical Operations,P020,96000,1,Filled
+P022,Marco Rossi,Registered Nurse,Clinical Operations,P020,96000,1,Filled
+P023,Hana Kobayashi,Clinical Coordinator,Clinical Operations,P013,135000,1,Filled
+P024,Noah Fitzgerald,Clinical Educator,Clinical Operations,P023,118000,1,Filled
+P025,Sara Lindqvist,Operations Manager,Clinical Operations,P003,170000,1,Filled
+P026,Owen Murphy,Facilities Coordinator,Facilities,P025,88000,1,Filled
+P027,Jamie Chow,Facilities Technician,Facilities,P025,76000,1,Contingent
+P028,Aaliyah Brooks,Patient Services Manager,Clinical Operations,P003,158000,1,Filled
+P029,Zoe Harding,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P030,Leo Bianchi,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P031,Mia Thompson,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P032,Jack Nguyen,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P033,Freya Andersen,Patient Services Officer,Clinical Operations,P028,72000,0.8,Filled
+P034,Elijah Osman,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P035,Ruby Campbell,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P036,Finn O'Brien,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P037,Layla Hassan,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P038,Oscar Lindberg,Patient Services Officer,Clinical Operations,P028,72000,1,Filled
+P039,Emily Zhao,HR Business Partner,People & Culture,P005,145000,1,Filled
+P040,Liam O'Connor,Recruitment Lead,People & Culture,P005,132000,1,Filled
+P041,Mei Ling Tan,Learning & Development Coordinator,People & Culture,P039,98000,0.6,Filled
+P042,Diego Fernandez,Privacy Officer,People & Culture,P005,120000,1,Filled
+P043,Sofia Kowalski,IT Manager,Corporate Services,P001,175000,1,Filled
+P044,Ethan Brooks,IT Support Officer,Corporate Services,P043,78000,1,Filled
+P045,Ravi Shankar,IT Support Officer,Corporate Services,P043,78000,1,Filled

@@ -1,0 +1,53 @@
+{
+  "rules": [
+    {
+      "id": "chief-executive",
+      "match": ["chief executive", "ceo", "managing director"],
+      "tier": "governance",
+      "instrument": "Board appointment",
+      "reason": "The chief executive role is a governance control and is never removed or reassigned by a scenario."
+    },
+    {
+      "id": "company-secretary",
+      "match": ["company secretary"],
+      "tier": "statutory",
+      "instrument": "Corporations Act s188",
+      "reason": "A statutory officer required under the Corporations Act."
+    },
+    {
+      "id": "chief-financial-officer",
+      "match": ["chief financial officer", "cfo"],
+      "tier": "governance",
+      "instrument": "Board / audit committee reporting line",
+      "reason": "Statutory financial reporting accountability sits with this role."
+    },
+    {
+      "id": "safety-officer",
+      "match": ["chief safety officer", "whs manager", "work health and safety", "safety officer"],
+      "tier": "safety",
+      "instrument": "WHS Act duty holder",
+      "reason": "A named duty holder under work health and safety legislation."
+    },
+    {
+      "id": "clinical-director",
+      "match": ["clinical director", "director of nursing", "chief medical officer", "clinical governance"],
+      "tier": "safety",
+      "instrument": "Clinical governance framework",
+      "reason": "A clinical governance role with direct patient-safety accountability."
+    },
+    {
+      "id": "privacy-officer",
+      "match": ["privacy officer", "data protection officer"],
+      "tier": "statutory",
+      "instrument": "Privacy Act 1988",
+      "reason": "A statutory privacy officer designation."
+    },
+    {
+      "id": "public-officer",
+      "match": ["public officer"],
+      "tier": "statutory",
+      "instrument": "Income Tax Assessment Act 1936 s252",
+      "reason": "A statutory office required for tax administration purposes."
+    }
+  ]
+}
