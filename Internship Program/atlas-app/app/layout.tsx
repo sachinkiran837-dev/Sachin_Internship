@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Atlas — establishment mapping (POC)",
+  title: "Atlas — establishment mapping",
   description: "Ingest, map, model and explain an establishment structure.",
 };
 

@@ -27,10 +27,6 @@ export function SiteHeader() {
             Establishment mapping
           </span>
         </div>
-
-        <span className="ml-auto hidden rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground md:inline">
-          POC candidate
-        </span>
       </div>
     </header>
   );

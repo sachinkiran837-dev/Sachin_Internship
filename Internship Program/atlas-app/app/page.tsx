@@ -2,13 +2,11 @@ import Link from "next/link";
 import { listOrgs } from "@/db/repo";
 import { UploadForm } from "@/components/upload/UploadForm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { hasAI } from "@/lib/ai/client";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const orgs = await listOrgs();
-  const aiEnabled = hasAI();
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-14">
@@ -21,10 +19,6 @@ export default async function Home() {
         <p className="mt-3 max-w-2xl text-base text-muted-foreground">
           Ingest an establishment export in any format, explore and edit the structure, model a
           redesign against real cost and safe-staffing guardrails, and get a plain-language read.
-        </p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Running {aiEnabled ? "with" : "without"} AI-assisted classification and narrative.
-          {!aiEnabled && " Set ANTHROPIC_API_KEY to enable it — deterministic fallbacks are in use."}
         </p>
       </div>
 

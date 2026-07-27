@@ -24,13 +24,18 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
     <div className="flex flex-1 flex-col">
       <OrgNav orgId={orgId} active="findings" />
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-8">
-        <div className="flex items-center justify-between">
+        <div>
           <h1 className="text-xl font-semibold">
             Findings {scenario ? `— ${scenario.name}` : "— baseline"}
           </h1>
-          <Badge variant={result.source === "ai" ? "default" : "outline"}>
-            {result.source === "ai" ? "AI-generated narrative" : "Deterministic fallback narrative"}
-          </Badge>
+          {/* Provenance stays visible per the house rule, but stated as what
+              produced the wording rather than as an internal code path —
+              every figure below is computed either way. */}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {result.source === "ai"
+              ? "Wording drafted by AI from figures computed here. Every number is calculated, not generated."
+              : "Written directly from the computed figures."}
+          </p>
         </div>
 
         <Card>
@@ -61,7 +66,7 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
                 <CardContent className="flex flex-col gap-2 text-sm">
                   <p>{f.soWhat}</p>
                   <p className="text-xs text-muted-foreground">
-                    Evidence: {f.evidenceIds.join(", ")}
+                    Based on {f.evidenceIds.map(evidenceLabel).join(", ")}.
                   </p>
                   {f.followups.length > 0 && (
                     <p className="text-xs text-muted-foreground">
@@ -76,4 +81,25 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
       </main>
     </div>
   );
+}
+
+/**
+ * Findings carry the metric keys they were derived from so the read stays
+ * traceable. Those keys are internal identifiers, so they're named in
+ * business terms here rather than shown raw.
+ */
+const EVIDENCE_LABELS: Record<string, string> = {
+  protectedByTier: "protected and governance roles",
+  headcount: "headcount",
+  totalCost: "fully-loaded cost",
+  layers: "management layers",
+  averageSpan: "average span of control",
+  "thin-spans": "spans below the healthy range",
+  "wide-spans": "spans above the healthy range",
+  "single-report-chains": "single-report reporting lines",
+  "vacant-manager": "vacant roles still carrying a team",
+};
+
+function evidenceLabel(id: string): string {
+  return EVIDENCE_LABELS[id] ?? id.replace(/-/g, " ");
 }

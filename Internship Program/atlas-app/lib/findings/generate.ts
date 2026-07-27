@@ -22,7 +22,7 @@ function buildFindings(metrics: DiagnosticMetrics): Finding[] {
       id: randomUUID(),
       headline: `${metrics.protectedCount} protected or governance role${metrics.protectedCount === 1 ? "" : "s"} identified`,
       soWhat:
-        "These roles (statutory, governance or safety-critical) are held out of scope for any redesign move — they are blocked at the point of mutation, not just flagged for review.",
+        "These roles (statutory, governance or safety-critical) are held out of scope for any redesign move — a change to one is refused when it is applied, not merely flagged for review.",
       evidenceIds: ["protectedByTier"],
       followups: ["Which of these roles have a named succession plan?"],
     });

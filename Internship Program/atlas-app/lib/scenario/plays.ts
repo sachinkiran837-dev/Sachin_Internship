@@ -121,7 +121,7 @@ function protectedSkipNote(skipped: LayoutNode[], mode: TouchMode = "structural"
   const label = mode === "commercial" ? "protected role" : "protected or clinical role";
   return `Left ${skipped.length} ${label}${skipped.length === 1 ? "" : "s"} in place (${names.join(", ")}${
     distinct.length > names.length ? ", …" : ""
-  }) — blocked at the mutation entry point, not just filtered here.`;
+  }) — these are blocked when a change is applied, not merely hidden from this list.`;
 }
 
 function empty(playId: string, summary: string, method: string): PlayAnalysis {
@@ -313,7 +313,7 @@ const agencyPremium: ScenarioPlay = {
         `Saving is the premium only — each role's cost minus its permanent benchmark, never the whole role. ` +
         `${benchmarked} benchmarked against this org's own permanent staff` +
         (assumed > 0
-          ? `; ${assumed} had no permanent equivalent and used the ${(assumptions.agencyPremiumFallbackRate * 100).toFixed(0)}% assumed premium from config/scenario-assumptions.json.`
+          ? `; ${assumed} had no permanent equivalent in this org, so a stated ${(assumptions.agencyPremiumFallbackRate * 100).toFixed(0)}% premium assumption was used instead.`
           : ". No assumed rates were needed.") +
         " Headcount is unchanged — the work stays, only its price changes.",
       guardrailNote: protectedSkipNote(skipped, "commercial"),
@@ -411,7 +411,7 @@ const thinSpanConsolidation: ScenarioPlay = {
       headcountDelta: -candidates.length,
       summary: `${candidates.length} sub-scale team${candidates.length === 1 ? "" : "s"} can merge into a peer that has room to absorb them.`,
       method:
-        `Saving is the manager cost released. Teams move intact; only the surplus manager role goes. Every merge is checked against the ${SPAN.healthyMin}–${SPAN.healthyMax} healthy span band in config/span-thresholds.json, and receivers are re-checked as they fill so no manager is double-counted.`,
+        `Saving is the manager cost released. Teams move intact; only the surplus manager role goes. Every merge is checked against the healthy span band of ${SPAN.healthyMin}–${SPAN.healthyMax}, and receivers are re-checked as they fill so no manager is double-counted.`,
       guardrailNote: protectedSkipNote(skipped),
     };
   },
@@ -691,7 +691,7 @@ const vacancyRationalisation: ScenarioPlay = {
       headcountDelta: -closeable.length,
       summary: `${closeable.length} vacancy${closeable.length === 1 ? "" : "s"} can be closed without touching a clinical or safety role.`,
       method:
-        `Saving is the budgeted cost of each closed vacancy at a realisation rate of ${(rate * 100).toFixed(0)}% (config/scenario-assumptions.json — lower it if vacancies are partly covered by overtime that would continue).`,
+        `Saving is the budgeted cost of each closed vacancy at a stated realisation rate of ${(rate * 100).toFixed(0)}% — lower that assumption if these vacancies are partly covered by overtime that would continue.`,
       guardrailNote: notes.filter(Boolean).join(" ") || null,
     };
   },
@@ -1016,7 +1016,7 @@ const contractorInsourcing: ScenarioPlay = {
       headcountDelta: 0,
       summary: `${qualifying.length} outsourced service${qualifying.length === 1 ? "" : "s"} ${qualifying.length === 1 ? "has" : "have"} reached the scale where in-housing beats the vendor margin.`,
       method:
-        `Saving is the assumed ${(marginRate * 100).toFixed(0)}% vendor margin (config/scenario-assumptions.json) released on each in-housed role — not the role's whole cost, since the work and the people continue. Headcount is unchanged. Clusters below ${minSize} roles are deliberately excluded.`,
+        `Saving is a stated ${(marginRate * 100).toFixed(0)}% vendor margin released on each in-housed role — not the role's whole cost, since the work and the people continue. Headcount is unchanged. Clusters below ${minSize} roles are deliberately excluded.`,
       guardrailNote: notes.filter(Boolean).join(" ") || null,
     };
   },
