@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { AlertTriangle, Check } from "lucide-react";
 import { getBaselinePositions, getIssues, getOrg } from "@/db/repo";
 import { OrgNav } from "@/components/OrgNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,15 +57,37 @@ export default async function OrgConfirmPage({
 
         {conversions.length > 0 && (
           <div className="rounded-md border border-primary/30 bg-accent/40 px-4 py-3">
-            <p className="eyebrow mb-1.5">
+            <p className="eyebrow mb-2">
               <span className="eyebrow-dot" aria-hidden />
-              Source conversion
+              {conversions.length > 1 ? "How these files were bound together" : "Source conversion"}
             </p>
-            {conversions.map((c) => (
-              <p key={c.id} className="text-sm text-foreground">
-                {c.detail}
-              </p>
-            ))}
+            <p className="text-sm text-foreground">{conversions[0].detail}</p>
+
+            {conversions.length > 1 && (
+              <ul className="mt-2.5 flex flex-col gap-1.5 border-t border-primary/20 pt-2.5">
+                {conversions.slice(1).map((c) => {
+                  const [filename, ...rest] = c.detail.split(" — ");
+                  return (
+                    <li key={c.id} className="flex gap-2 text-sm">
+                      {/* An unusable file stays unresolved on ingest, so this
+                          is the one that needs the reader's eye. */}
+                      {c.resolved ? (
+                        <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                      ) : (
+                        <AlertTriangle
+                          className="mt-0.5 size-4 shrink-0 text-amber-600"
+                          aria-hidden
+                        />
+                      )}
+                      <span>
+                        <span className="font-medium">{filename}</span>
+                        <span className="text-muted-foreground"> — {rest.join(" — ")}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         )}
 

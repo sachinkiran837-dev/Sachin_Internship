@@ -19,6 +19,14 @@ Open http://localhost:3000, tick "use the synthetic demo export" (a fictional or
 
 Any tabular export is normalised to the same CSV shape before ingest — spreadsheets (`.xlsx`/`.xlsm`/`.xls`/`.ods`), delimited text (`.csv`/`.tsv`/`.txt`/`.psv`, with the delimiter sniffed rather than assumed from the extension), `.json` (bare array or `{data: [...]}` envelope, nested objects flattened to dotted columns), `.xml`, and HTML tables. The confirm screen states which format was read and what was done to it — the conversion is never silent. Column headers are matched case- and separator-insensitively, so a JSON `reportsTo` and a CSV `Manager ID` both land on the same field.
 
+**Upload as many files as you have.** Org data rarely arrives as one tidy export: it comes as an establishment list plus a payroll extract plus a vacancy report, each from a different system, each naming the same field differently, and often each covering only part of the organisation. `lib/ingest/bindFiles.ts` works out what each file *is* before deciding what to do with it:
+
+- A **roster** describes positions — it has a title, plus an ID, name or reporting line. Rosters are stacked, so an establishment split by site or division reassembles into one org, and reporting lines resolve across the file boundary.
+- An **attribute** file describes facts *about* positions — an ID or name plus columns like cost, FTE or status. These are joined onto the roster rather than appended, so a payroll file can be the only source of salary in the whole upload.
+- Anything with no usable key is **unusable** and is reported as such.
+
+Two rules keep this trustworthy. Where an attribute file disagrees with the roster, **the roster wins and the disagreement is counted** — silently overwriting an establishment record with a payroll figure is the kind of invisible edit that destroys trust in every number downstream. And **every file's fate is stated per-file on the confirm screen**, including rows that matched nothing and files that contributed nothing; the failure mode being guarded against is someone uploading five files, seeing a map, and never learning that three were dropped.
+
 PDF is deliberately not supported: table extraction from PDF is unreliable enough that it would import a plausible-looking but wrong establishment, which is worse than refusing the file.
 
 ### Redesign plays (Scenarios tab)
@@ -45,9 +53,12 @@ Two scripts exercise the real code paths (not just the UI) against the actual da
 
 ```bash
 npx tsx --env-file=.env.local scripts/verify-pipeline.ts       # ingest -> tag -> guardrails -> mutate -> findings
-npx tsx --env-file=.env.local scripts/verify-upload-action.ts  # calls the real ingestFileAction server action
+npx tsx --env-file=.env.local scripts/verify-upload-action.ts  # the real ingestFileAction, single- and multi-file
 npx tsx --env-file=.env.local scripts/verify-plays.ts          # all ten redesign plays, with their maths re-checked
+npx tsx --env-file=.env.local scripts/verify-binding.ts        # multi-file binding against realistic messy inputs
 ```
+
+`verify-binding.ts` builds its fixtures from the demo CSV at run time: an establishment split across two files with different column names, a payroll extract that is the only source of cost anywhere, a status report containing staff who have left, and a file with no key at all. It asserts the halves reassemble without loss or duplication, that cost survives the join into the metrics, that unmatched rows are reported rather than absorbed, that the keyless file is refused loudly, and that reporting lines resolve across the file boundary.
 
 `verify-plays.ts` is the one that keeps the numbers honest: for every play it replays the play's own operations against the diagnostic engine and fails if the claimed saving doesn't equal the sum of the roles it named, if the modelled cost didn't actually move, or if the predicted headcount delta doesn't match what happened.
 

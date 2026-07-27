@@ -20,18 +20,24 @@ function formatBytes(bytes: number): string {
 export function UploadForm() {
   const [state, formAction, isPending] = useActionState(ingestFileAction, initialState);
   const [useSample, setUseSample] = useState(true);
-  const [selected, setSelected] = useState<File | null>(null);
+  const [selected, setSelected] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function assignFile(file: File | null) {
-    setSelected(file);
-    if (inputRef.current && file) {
-      // Keep the real <input type=file> as the form's source of truth so the
-      // server action receives the file the same way whether it was dropped
-      // or picked — no parallel state to fall out of sync.
+  /**
+   * The real <input type=file> stays the form's source of truth so the
+   * server action receives the same FormData whether files were dropped or
+   * picked. Dropping again adds to the set rather than replacing it —
+   * people assemble a multi-file upload one drag at a time.
+   */
+  function setFiles(next: File[]) {
+    const deduped = next.filter(
+      (f, i) => next.findIndex((o) => o.name === f.name && o.size === f.size) === i
+    );
+    setSelected(deduped);
+    if (inputRef.current) {
       const dt = new DataTransfer();
-      dt.items.add(file);
+      for (const f of deduped) dt.items.add(f);
       inputRef.current.files = dt.files;
     }
   }
@@ -71,9 +77,10 @@ export function UploadForm() {
             className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
           />
           <span className="text-sm">
-            <span className="font-medium">Upload your own establishment data</span>
+            <span className="font-medium">Upload your own organisation data</span>
             <span className="block text-muted-foreground">
-              Any tabular export — Atlas normalises it to CSV before ingest.
+              One file or many, in any tabular format — Atlas binds them into a single
+              establishment.
             </span>
           </span>
         </label>
@@ -90,48 +97,55 @@ export function UploadForm() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              assignFile(e.dataTransfer.files?.[0] ?? null);
+              setFiles([...selected, ...Array.from(e.dataTransfer.files ?? [])]);
             }}
             onClick={() => inputRef.current?.click()}
             className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${
               dragging ? "border-primary bg-accent/60" : "border-input hover:border-primary/50 hover:bg-accent/30"
             }`}
           >
-            {selected ? (
-              <>
-                <FileSpreadsheet className="size-6 text-primary" aria-hidden />
-                <p className="text-sm font-medium">{selected.name}</p>
-                <p className="text-xs text-muted-foreground">{formatBytes(selected.size)}</p>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelected(null);
-                    if (inputRef.current) inputRef.current.value = "";
-                  }}
-                  className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                >
-                  <X className="size-3" aria-hidden /> Choose a different file
-                </button>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="size-6 text-muted-foreground" aria-hidden />
-                <p className="text-sm font-medium">Drop a file here, or click to browse</p>
-                <p className="text-xs text-muted-foreground">
-                  Atlas converts it to CSV and tells you what it read.
-                </p>
-              </>
-            )}
+            <UploadCloud className="size-6 text-muted-foreground" aria-hidden />
+            <p className="text-sm font-medium">
+              {selected.length > 0
+                ? "Add another file, or click to browse"
+                : "Drop your files here, or click to browse"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Upload as many as you have — an establishment list, a payroll extract, a vacancy
+              report. Atlas works out what each one is and binds them into a single organisation.
+            </p>
           </div>
+
+          {selected.length > 0 && (
+            <ul className="flex flex-col divide-y rounded-md border">
+              {selected.map((f) => (
+                <li key={`${f.name}-${f.size}`} className="flex items-center gap-2 px-3 py-2">
+                  <FileSpreadsheet className="size-4 shrink-0 text-primary" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatBytes(f.size)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles(selected.filter((o) => o !== f))}
+                    aria-label={`Remove ${f.name}`}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <input
             ref={inputRef}
             id="file"
             name="file"
             type="file"
+            multiple
             accept={ACCEPT}
-            onChange={(e) => setSelected(e.target.files?.[0] ?? null)}
+            onChange={(e) => setFiles([...selected, ...Array.from(e.target.files ?? [])])}
             className="sr-only"
           />
 
@@ -169,8 +183,12 @@ export function UploadForm() {
         </p>
       )}
 
-      <Button type="submit" disabled={isPending || (!useSample && !selected)}>
-        {isPending ? "Ingesting…" : "Ingest establishment export"}
+      <Button type="submit" disabled={isPending || (!useSample && selected.length === 0)}>
+        {isPending
+          ? "Ingesting…"
+          : selected.length > 1
+            ? `Bind ${selected.length} files and ingest`
+            : "Ingest establishment export"}
       </Button>
     </form>
   );
