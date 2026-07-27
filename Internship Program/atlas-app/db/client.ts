@@ -1,22 +1,11 @@
-import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
-// Migrations are applied by the `predev`/`prebuild` npm hooks (`drizzle-kit
-// migrate`), not here. Running them as a module-load side effect caused a
-// race across Next's parallel build workers, each opening the same sqlite
-// file and re-applying the same migration simultaneously.
-const dbPath = path.join(process.cwd(), "db", "atlas.db");
-
-declare global {
-  var __atlasSqlite: Database.Database | undefined;
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
 }
 
-const sqlite = globalThis.__atlasSqlite ?? new Database(dbPath);
-if (process.env.NODE_ENV !== "production") globalThis.__atlasSqlite = sqlite;
+const sql = neon(process.env.DATABASE_URL);
 
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-
-export const db = drizzle(sqlite, { schema });
+export const db = drizzle(sql, { schema });

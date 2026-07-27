@@ -1,6 +1,6 @@
 /**
  * Standalone end-to-end verification of the Atlas pipeline against the real
- * sqlite db — not a page click-through, but exercises every skill's actual
+ * database — not a page click-through, but exercises every skill's actual
  * logic module with real data: ingest -> map/metrics -> scenario mutation
  * (guardrails + audit) -> findings. Run with `npx tsx scripts/verify-pipeline.ts`.
  */

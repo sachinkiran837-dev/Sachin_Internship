@@ -6,7 +6,7 @@ _State as of 2026-07-24._ A working slice of Atlas — org-mapping and redesign-
 
 ## Run it
 
-No external services required — everything runs locally against a bundled SQLite database.
+Needs a Postgres database — create a free project at [neon.tech](https://neon.tech), copy `.env.example` to `.env.local`, and set `DATABASE_URL` to its connection string.
 
 ```bash
 npm install
@@ -21,11 +21,11 @@ A smaller, clean 45-row fixture (`db/seed-data/sample-establishment.csv`) still 
 
 ### Verify the pipeline end-to-end
 
-Two scripts exercise the real code paths (not just the UI) against the actual database:
+Two scripts exercise the real code paths (not just the UI) against the actual database. `next dev`/`next build` and `drizzle-kit` load `.env.local` automatically, but these standalone scripts don't go through either, so pass `--env-file` explicitly:
 
 ```bash
-npx tsx scripts/verify-pipeline.ts       # ingest -> tag -> guardrails -> mutate -> findings
-npx tsx scripts/verify-upload-action.ts  # calls the real ingestFileAction server action
+npx tsx --env-file=.env.local scripts/verify-pipeline.ts       # ingest -> tag -> guardrails -> mutate -> findings
+npx tsx --env-file=.env.local scripts/verify-upload-action.ts  # calls the real ingestFileAction server action
 ```
 
 ## AI-assisted vs. deterministic (the visible-fallback pattern)
@@ -38,11 +38,17 @@ Two behaviours are AI-shaped: role classification (ingest) and the findings narr
 - **The establishment map always shows the org's one active working-copy scenario**, matching the reference build's single-active-scenario contract between C4 and C5. Other named scenarios are created and compared on the Scenarios tab (headcount/cost/layer deltas, safe-staffing flag) but aren't independently visualised on the map in this build.
 - **C2 (the dedicated QA/validation loop) wasn't one of the four supplied specs.** Low-confidence inferences and orphan resolutions from ingest are surfaced on the confirm screen for review, but there's no separate correction workflow beyond that.
 - **HR export parsing is a generic column-mapper** (auto-detect by header synonym, CSV/XLSX via `xlsx`), not tuned to a specific vendor's export shape.
-- **No auth, multi-tenancy, or residency infrastructure** — this is local-only, single-session, synthetic-data-only per the house sandbox rule (never real client data in a POC without the deployment gate in `M4-the-guardrails.md`).
-- **SQLite instead of Neon Postgres.** `tractin-starter` access (Next.js + Drizzle + Tailwind + shadcn — the same stack this app already uses) wasn't available yet when this was built. `db/schema.ts` is plain Drizzle, so swapping the driver from `better-sqlite3` to `@neondatabase/serverless`/`pg` is a driver-and-config change, not a schema rewrite.
+- **No auth, multi-tenancy, or residency infrastructure** — this is single-session, synthetic-data-only per the house sandbox rule (never real client data in a POC without the deployment gate in `M4-the-guardrails.md`). Fine for a private preview deploy; don't share the URL as-is beyond that.
+- **Neon Postgres via the HTTP driver (`drizzle-orm/neon-http`)**, not a persistent connection pool — the simplest fit for Vercel's serverless functions, at the cost of one round trip per query rather than a pooled connection. Revisit if query volume ever makes that matter.
 
 ## When `tractin-starter` access lands
 
-1. Swap the SQLite driver for Neon Postgres in `db/client.ts` and `drizzle.config.ts` (dialect `postgresql`); `db/schema.ts`'s table definitions carry over with minimal edits.
-2. Re-platform onto the starter's auth, module-manifest, and de-brand scaffolding per `../Development Skills/spinup/SKILL.md`.
-3. Everything else — `lib/`, the route tree under `app/org/[orgId]/`, the component tree — ports as-is; none of it is SQLite- or starter-specific.
+1. Re-platform onto the starter's auth, module-manifest, and de-brand scaffolding per `../Development Skills/spinup/SKILL.md`. The Neon Postgres swap above already happened, so `db/schema.ts` and `db/client.ts` port over with minimal edits.
+2. Everything else — `lib/`, the route tree under `app/org/[orgId]/`, the component tree — ports as-is; none of it is starter-specific.
+
+## Deploying to Vercel
+
+1. Push this repo to GitHub (already done — origin is `sachinkiran837-dev/Sachin_Internship`) and import it in Vercel. Since `atlas-app/` is a subfolder, set the project's **Root Directory** to `Internship Program/atlas-app`.
+2. Add environment variables in the Vercel project settings: `DATABASE_URL` (required), `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` (optional — the app runs on its deterministic fallback without them).
+3. `predev`/`prebuild` already run `drizzle-kit migrate` against `DATABASE_URL`, so the schema applies automatically on Vercel's build step — no manual migration step needed once the env var is set.
+4. Deploy. No further config needed — the app has no other local-filesystem dependencies.

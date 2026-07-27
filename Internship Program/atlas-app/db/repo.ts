@@ -29,15 +29,13 @@ export async function createOrg(input: {
   anonymized: boolean;
 }): Promise<string> {
   const id = randomUUID();
-  db.insert(orgs)
-    .values({
-      id,
-      name: input.name,
-      sourceFilename: input.sourceFilename,
-      anonymized: input.anonymized,
-      createdAt: new Date().toISOString(),
-    })
-    .run();
+  await db.insert(orgs).values({
+    id,
+    name: input.name,
+    sourceFilename: input.sourceFilename,
+    anonymized: input.anonymized,
+    createdAt: new Date().toISOString(),
+  });
   return id;
 }
 
@@ -60,26 +58,27 @@ export async function savePositions(rows: Position[]): Promise<void> {
     classificationSource: p.classificationSource,
   }));
   for (const row of insertRows) {
-    db.insert(positions).values(row).run();
+    await db.insert(positions).values(row);
   }
 }
 
 export async function saveIssues(issues: IngestIssue[]): Promise<void> {
   for (const issue of issues) {
-    db.insert(ingestIssues).values(issue).run();
+    await db.insert(ingestIssues).values(issue);
   }
 }
 
 export async function getOrg(orgId: string) {
-  return db.select().from(orgs).where(eq(orgs.id, orgId)).get();
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  return rows[0];
 }
 
 export async function listOrgs() {
-  return db.select().from(orgs).all();
+  return db.select().from(orgs);
 }
 
 export async function getBaselinePositions(orgId: string): Promise<Position[]> {
-  const rows = db.select().from(positions).where(eq(positions.orgId, orgId)).all();
+  const rows = await db.select().from(positions).where(eq(positions.orgId, orgId));
   return rows.map(toPosition);
 }
 
@@ -88,7 +87,7 @@ export function getBaselineRootId(baseline: Position[]): string | null {
 }
 
 export async function getIssues(orgId: string): Promise<IngestIssue[]> {
-  const rows = db.select().from(ingestIssues).where(eq(ingestIssues.orgId, orgId)).all();
+  const rows = await db.select().from(ingestIssues).where(eq(ingestIssues.orgId, orgId));
   return rows as IngestIssue[];
 }
 
@@ -115,17 +114,17 @@ function toScenario(row: typeof scenarios.$inferSelect): ScenarioRecord {
 }
 
 export async function listScenarios(orgId: string): Promise<ScenarioRecord[]> {
-  const rows = db.select().from(scenarios).where(eq(scenarios.orgId, orgId)).all();
+  const rows = await db.select().from(scenarios).where(eq(scenarios.orgId, orgId));
   return rows.map(toScenario);
 }
 
 export async function getScenario(scenarioId: string): Promise<ScenarioRecord | null> {
-  const row = db.select().from(scenarios).where(eq(scenarios.id, scenarioId)).get();
-  return row ? toScenario(row) : null;
+  const rows = await db.select().from(scenarios).where(eq(scenarios.id, scenarioId));
+  return rows[0] ? toScenario(rows[0]) : null;
 }
 
 export async function getActiveScenario(orgId: string): Promise<ScenarioRecord | null> {
-  const rows = db.select().from(scenarios).where(eq(scenarios.orgId, orgId)).all();
+  const rows = await db.select().from(scenarios).where(eq(scenarios.orgId, orgId));
   const active = rows.find((r) => r.status === "active");
   return active ? toScenario(active) : null;
 }
@@ -149,7 +148,7 @@ export async function getOrCreateActiveScenario(orgId: string): Promise<Scenario
     movesJson: "[]",
     createdAt: new Date().toISOString(),
   };
-  db.insert(scenarios).values(scenarioRow).run();
+  await db.insert(scenarios).values(scenarioRow);
   return toScenario(scenarioRow as typeof scenarios.$inferSelect);
 }
 
@@ -165,7 +164,7 @@ export async function createNamedScenario(orgId: string, name: string): Promise<
     movesJson: "[]",
     createdAt: new Date().toISOString(),
   };
-  db.insert(scenarios).values(scenarioRow).run();
+  await db.insert(scenarios).values(scenarioRow);
   return toScenario(scenarioRow as typeof scenarios.$inferSelect);
 }
 
@@ -174,17 +173,17 @@ export async function saveScenarioState(
   nextPositions: Position[],
   moves: Move[]
 ): Promise<void> {
-  db.update(scenarios)
+  await db
+    .update(scenarios)
     .set({ workingGraphJson: JSON.stringify(nextPositions), movesJson: JSON.stringify(moves) })
-    .where(eq(scenarios.id, scenarioId))
-    .run();
+    .where(eq(scenarios.id, scenarioId));
 }
 
 export async function appendAuditEntry(entry: AuditEntry): Promise<void> {
-  db.insert(auditLog).values(entry).run();
+  await db.insert(auditLog).values(entry);
 }
 
 export async function listAuditLog(scenarioId: string): Promise<AuditEntry[]> {
-  const rows = db.select().from(auditLog).where(eq(auditLog.scenarioId, scenarioId)).all();
+  const rows = await db.select().from(auditLog).where(eq(auditLog.scenarioId, scenarioId));
   return rows as AuditEntry[];
 }
