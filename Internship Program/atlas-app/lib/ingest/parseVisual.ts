@@ -48,7 +48,7 @@ const MAX_VISUAL_BYTES = 5 * 1024 * 1024;
 
 const SYSTEM_PROMPT = `You transcribe organisation charts and staff lists into tabular data.
 
-Return ONLY a JSON array of objects. No prose, no markdown fences. Each object uses exactly these keys:
+Return ONLY a JSON array of objects. No prose before or after it, no markdown code fences. Each object uses exactly these keys:
 ${EXTRACTION_COLUMNS.map((c) => `"${c}"`).join(", ")}
 
 Rules, in order of importance:
@@ -160,9 +160,6 @@ async function extract(filename: string, buffer: Buffer, ext: string): Promise<V
           },
         ],
       },
-      // Prefilling the opening bracket removes the whole class of "here is the
-      // JSON you asked for" preambles rather than trying to strip them after.
-      { role: "assistant", content: "[" },
     ],
   });
 
@@ -171,14 +168,18 @@ async function extract(filename: string, buffer: Buffer, ext: string): Promise<V
     .join("")
     .trim();
 
-  return { rows: parseRows(`[${text}`, filename), model: response.model };
+  return { rows: parseRows(text, filename), model: response.model };
 }
 
 function parseRows(raw: string, filename: string): Record<string, string>[] {
-  // The prefill guarantees a leading bracket; guard the tail, which is what
-  // truncation at max_tokens actually damages.
+  // Takes the array out of whatever the model wrapped it in. Prefilling an
+  // opening bracket would make a preamble impossible, but current models
+  // reject a conversation that ends on an assistant message, so the wrapper
+  // is stripped here instead. A missing closing bracket means the response
+  // was truncated mid-chart, which falls through to the refusal below.
+  const start = raw.indexOf("[");
   const end = raw.lastIndexOf("]");
-  const candidate = end === -1 ? raw : raw.slice(0, end + 1);
+  const candidate = start === -1 || end <= start ? raw : raw.slice(start, end + 1);
 
   let parsed: unknown;
   try {

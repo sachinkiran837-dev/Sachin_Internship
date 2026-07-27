@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ParsedFile } from "./parseFile";
 import { mapColumns } from "./columnMapper";
 import { pseudonymize } from "./anonymize";
-import { classifyRole } from "./classify";
+import { classifyRoles, roleKey, type RoleClassification } from "./classify";
 import type {
   ColumnMapping,
   FieldConfidence,
@@ -382,50 +382,63 @@ export async function buildOrgGraph(
   const titleConfidence = fieldConfidence(columnMapping, "title");
   const deptConfidence = fieldConfidence(columnMapping, "department");
 
-  const positions: Position[] = await Promise.all(
-    resolved.map(async (r) => {
-      const classification = await classifyRole(r.row.title, r.row.department);
-
-      const confidence: FieldConfidence = {
-        name: nameConfidence,
-        title: titleConfidence,
-        department: deptConfidence,
-        manager: r.managerConfidence,
-        classification: classification.confidence,
-      };
-
-      if (r.managerConfidence < 0.6 || classification.confidence < 0.6) {
-        issues.push({
-          id: randomUUID(),
-          orgId: options.orgId,
-          kind: "low_confidence",
-          positionId: r.id,
-          detail: `Low-confidence inference on "${r.row.title}" — review before treating this record as confirmed.`,
-          resolved: false,
-        });
-      }
-
-      return {
-        id: r.id,
-        orgId: options.orgId,
-        rawName: options.anonymize ? null : r.row.rawName,
-        displayName: options.anonymize
-          ? pseudonymize(r.row.rawName, r.row.sourceRowIndex)
-          : r.row.rawName,
-        title: r.row.title,
-        department: r.row.department,
-        managerId: r.managerId,
-        cost: r.row.cost,
-        fte: r.row.fte,
-        status: r.row.status,
-        clinicalFlag: classification.clinicalFlag,
-        sourceRowIndex: r.row.sourceRowIndex,
-        confidence,
-        classificationSource: classification.source,
-        synthetic: false,
-      } satisfies Position;
-    })
+  // Every distinct role is classified once, in batches, before any position
+  // is assembled. Classifying per position instead would cost one API call
+  // per row — invisible on a deployment with no key, and an ingest that
+  // never returns on one with a key and a real client establishment.
+  const classifications = await classifyRoles(
+    resolved.map((r) => ({ title: r.row.title, department: r.row.department }))
   );
+
+  const positions: Position[] = resolved.map((r) => {
+    const classification: RoleClassification = classifications.get(
+      roleKey(r.row.title, r.row.department)
+    ) ?? {
+      managementLevel: "individual_contributor",
+      clinicalFlag: false,
+      confidence: 0.6,
+      source: "fallback",
+    };
+
+    const confidence: FieldConfidence = {
+      name: nameConfidence,
+      title: titleConfidence,
+      department: deptConfidence,
+      manager: r.managerConfidence,
+      classification: classification.confidence,
+    };
+
+    if (r.managerConfidence < 0.6 || classification.confidence < 0.6) {
+      issues.push({
+        id: randomUUID(),
+        orgId: options.orgId,
+        kind: "low_confidence",
+        positionId: r.id,
+        detail: `Low-confidence inference on "${r.row.title}" — review before treating this record as confirmed.`,
+        resolved: false,
+      });
+    }
+
+    return {
+      id: r.id,
+      orgId: options.orgId,
+      rawName: options.anonymize ? null : r.row.rawName,
+      displayName: options.anonymize
+        ? pseudonymize(r.row.rawName, r.row.sourceRowIndex)
+        : r.row.rawName,
+      title: r.row.title,
+      department: r.row.department,
+      managerId: r.managerId,
+      cost: r.row.cost,
+      fte: r.row.fte,
+      status: r.row.status,
+      clinicalFlag: classification.clinicalFlag,
+      sourceRowIndex: r.row.sourceRowIndex,
+      confidence,
+      classificationSource: classification.source,
+      synthetic: false,
+    } satisfies Position;
+  });
 
   // Headings first, so the root of the map is the first row with no manager.
   return { positions: [...syntheticPositions, ...positions], issues, columnMapping };

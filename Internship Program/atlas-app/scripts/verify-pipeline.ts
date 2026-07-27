@@ -19,6 +19,7 @@ import { tagNodes } from "../lib/graph/tagging";
 import { computeMetrics } from "../lib/metrics/diagnostics";
 import { reassign, remove } from "../lib/scenario/moves";
 import { parseScenarioText } from "../lib/scenario/moveParser";
+import { hasAI } from "../lib/ai/client";
 import { generateFindings } from "../lib/findings/generate";
 import { findSafeStaffingBreaches } from "../lib/scenario/compare";
 import {
@@ -150,9 +151,16 @@ async function main() {
   const protectedBreaches = breaches.filter((id) => protectedBaselineIds.has(id));
   assert(protectedBreaches.length === 0, "no protected-tier role should have been touched given the guardrail");
 
-  console.log("10. Findings synthesis (C3 narrative layer, deterministic fallback since no ANTHROPIC_API_KEY)...");
+  console.log(
+    `10. Findings synthesis (C3 narrative layer, ${hasAI() ? "live model" : "deterministic fallback, no ANTHROPIC_API_KEY"})...`
+  );
   const findings = await generateFindings(postFlattenMetrics);
-  assert(findings.source === "fallback", "expected deterministic fallback without an API key");
+  // Either path is correct; what must hold is that the app never claims one
+  // while running the other.
+  assert(
+    findings.source === (hasAI() ? "ai" : "fallback"),
+    `findings source "${findings.source}" does not match whether a key is configured`
+  );
   assert(findings.findings.length > 0 && findings.findings.length <= 5, `expected 1-5 findings, got ${findings.findings.length}`);
   assert(findings.findings.some((f) => f.headline.toLowerCase().includes("protected")), "expected a dedicated protected-zone finding");
   console.log(`   narrative: "${findings.narrative}"`);

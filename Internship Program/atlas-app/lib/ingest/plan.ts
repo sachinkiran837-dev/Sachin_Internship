@@ -92,7 +92,7 @@ const SYSTEM_PROMPT = `You are the ingest planner for Atlas, an organisation-des
 
 You never transcribe, summarise or produce data. You return a plan and nothing else. Another system does all the joining, filtering and arithmetic from your plan.
 
-Return ONLY a JSON object. No prose, no markdown fences. Shape:
+Return ONLY a JSON object. No prose before or after it, no markdown code fences. Shape:
 
 {
   "files": [
@@ -164,9 +164,6 @@ export async function planIngest(
             `Here is what actually arrived.\n\n${files.map(digest).join("\n\n")}\n\n` +
             `Return the plan as JSON.`,
         },
-        // Prefilling the brace removes the whole class of "here is the plan
-        // you asked for" preambles rather than stripping them afterwards.
-        { role: "assistant", content: "{" },
       ],
     });
 
@@ -175,7 +172,7 @@ export async function planIngest(
       .join("")
       .trim();
 
-    return validatePlan(`{${text}`, files, response.model);
+    return validatePlan(text, files, response.model);
   } catch (err) {
     return {
       files: [],
@@ -401,12 +398,21 @@ function normaliseName(filename: string): string {
   return filename.trim().toLowerCase().split(/[\\/]/).pop() ?? "";
 }
 
+/**
+ * Takes the JSON object out of whatever the model wrapped it in. Asking for
+ * bare JSON gets bare JSON nearly always, but "here is the plan:" and a
+ * ```json fence are both common enough to be worth surviving — and the
+ * alternative, prefilling an opening brace to make a preamble impossible,
+ * is not available: current models reject a conversation that ends on an
+ * assistant message.
+ */
 function parseObject(raw: string): Record<string, unknown> | null {
-  // The prefill guarantees a leading brace; truncation damages the tail.
+  const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
-  const candidate = end === -1 ? raw : raw.slice(0, end + 1);
+  if (start === -1 || end <= start) return null;
+
   try {
-    const parsed: unknown = JSON.parse(candidate);
+    const parsed: unknown = JSON.parse(raw.slice(start, end + 1));
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;

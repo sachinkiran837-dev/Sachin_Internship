@@ -237,7 +237,7 @@ function planWarnings(orgId: string, plan: IngestPlan | null, filteredOut: numbe
       kind: "conversion" as const,
       positionId: null,
       detail:
-        `Scope from your instructions: ${filteredOut} row${filteredOut === 1 ? "" : "s"} were left out before anything was bound, ` +
+        `Scope from your instructions: ${filteredOut} row${filteredOut === 1 ? " was" : "s were"} left out before anything was bound, ` +
         `on the "${column}" column — ` +
         (include.length > 0 ? `keeping only ${include.join(", ")}` : "") +
         (include.length > 0 && exclude.length > 0 ? ", and " : "") +
