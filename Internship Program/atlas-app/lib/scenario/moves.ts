@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Position } from "@/lib/graph/types";
-import { checkCycle, checkProtected, checkRoot } from "./guardrails";
+import { checkCycle, checkProtected, checkRoot, checkSynthetic } from "./guardrails";
 
 export interface MoveOutcome {
   positions: Position[];
@@ -52,6 +52,11 @@ export function reassign(
     return { positions, blocked: true, blockReason: rootGuard.reason, description: `Reassign "${position.title}"`, affectedIds: [positionId] };
   }
 
+  const syntheticGuard = checkSynthetic(position);
+  if (syntheticGuard.blocked) {
+    return { positions, blocked: true, blockReason: syntheticGuard.reason, description: `Reassign "${position.title}"`, affectedIds: [positionId] };
+  }
+
   const protectedGuard = checkProtected(position);
   if (protectedGuard.blocked) {
     return {
@@ -94,6 +99,11 @@ export function remove(positions: Position[], rootId: string | null, positionId:
   const rootGuard = checkRoot(positionId, rootId);
   if (rootGuard.blocked) {
     return { positions, blocked: true, blockReason: rootGuard.reason, description: `Remove "${position.title}"`, affectedIds: [positionId] };
+  }
+
+  const syntheticGuard = checkSynthetic(position);
+  if (syntheticGuard.blocked) {
+    return { positions, blocked: true, blockReason: syntheticGuard.reason, description: `Remove "${position.title}"`, affectedIds: [positionId] };
   }
 
   const protectedGuard = checkProtected(position);
@@ -146,6 +156,7 @@ export function add(
     sourceRowIndex: -1,
     confidence: { name: 1, title: 1, department: 1, manager: 1, classification: 1 },
     classificationSource: "fallback",
+    synthetic: false,
   };
 
   return {
@@ -170,6 +181,11 @@ export function rebase(
   const position = positions.find((p) => p.id === positionId);
   if (!position) {
     return { positions, blocked: true, blockReason: "Position not found.", description: "Rebase", affectedIds: [] };
+  }
+
+  const syntheticGuard = checkSynthetic(position);
+  if (syntheticGuard.blocked) {
+    return { positions, blocked: true, blockReason: syntheticGuard.reason, description: `Rebase "${position.title}"`, affectedIds: [positionId] };
   }
 
   const protectedGuard = checkProtected(position);

@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
-import { getBaselinePositions, getIssues, getOrg, getSourceFiles } from "@/db/repo";
+import { getBaselinePositions, getIngestPlan, getIssues, getOrg, getSourceFiles } from "@/db/repo";
 import { OrgNav } from "@/components/OrgNav";
 import { SourceDataReport } from "@/components/ingest/SourceDataReport";
+import { PlanReport } from "@/components/ingest/PlanReport";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,9 +28,15 @@ export default async function OrgConfirmPage({
   const org = await getOrg(orgId);
   if (!org) notFound();
 
-  const positions = await getBaselinePositions(orgId);
+  const all = await getBaselinePositions(orgId);
+  // Heading nodes added to consolidate the map are structure, not roles. They
+  // are excluded here for the same reason they are excluded from the metrics:
+  // a coverage figure that counted them would report a missing cost on a box
+  // that was never a job.
+  const positions = all.filter((p) => !p.synthetic);
   const issues = await getIssues(orgId);
   const sourceFiles = await getSourceFiles(orgId);
+  const plan = await getIngestPlan(orgId);
 
   // How complete the establishment actually is, field by field. The headline
   // count says how many rows arrived; this says how much of each row is
@@ -129,6 +136,8 @@ export default async function OrgConfirmPage({
             )}
           </div>
         )}
+
+        <PlanReport context={org.ingestContext ?? ""} plan={plan} />
 
         {sourceFiles.length > 0 && <SourceDataReport files={sourceFiles} />}
 

@@ -4,6 +4,7 @@ import { db } from "./client";
 import { auditLog, ingestIssues, orgs, positions, scenarios, sourceFiles, uploadChunks } from "./schema";
 import type { IngestIssue, Position, Move, AuditEntry } from "@/lib/graph/types";
 import type { FileBinding } from "@/lib/ingest/bindFiles";
+import type { IngestPlan } from "@/lib/ingest/plan";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -40,6 +41,7 @@ function toPosition(row: typeof positions.$inferSelect): Position {
     sourceRowIndex: row.sourceRowIndex,
     confidence: JSON.parse(row.confidenceJson),
     classificationSource: row.classificationSource as Position["classificationSource"],
+    synthetic: row.synthetic,
   };
 }
 
@@ -47,6 +49,9 @@ export async function createOrg(input: {
   name: string;
   sourceFilename: string;
   anonymized: boolean;
+  /** What the user typed on the upload screen, and how it was read. */
+  ingestContext?: string | null;
+  plan?: IngestPlan | null;
 }): Promise<string> {
   const id = randomUUID();
   await db.insert(orgs).values({
@@ -55,8 +60,22 @@ export async function createOrg(input: {
     sourceFilename: input.sourceFilename,
     anonymized: input.anonymized,
     createdAt: new Date().toISOString(),
+    ingestContext: input.ingestContext?.trim() || null,
+    planJson: input.plan ? JSON.stringify(input.plan) : null,
   });
   return id;
+}
+
+/** The plan an establishment was ingested under, if it was given instructions. */
+export async function getIngestPlan(orgId: string): Promise<IngestPlan | null> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  const raw = rows[0]?.planJson;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as IngestPlan;
+  } catch {
+    return null;
+  }
 }
 
 export async function savePositions(rows: Position[]): Promise<void> {
@@ -76,6 +95,7 @@ export async function savePositions(rows: Position[]): Promise<void> {
     sourceRowIndex: p.sourceRowIndex,
     confidenceJson: JSON.stringify(p.confidence),
     classificationSource: p.classificationSource,
+    synthetic: p.synthetic,
   }));
   for (const batch of chunk(insertRows, INSERT_BATCH)) {
     await db.insert(positions).values(batch);
@@ -103,6 +123,7 @@ export async function saveSourceFiles(orgId: string, bindings: FileBinding[]): P
       conversionDetail: b.conversionDetail,
       detail: b.detail,
       needsReview: b.needsReview,
+      planReason: b.planReason,
       orderIndex: i,
     }))
   );
@@ -127,6 +148,7 @@ export async function getSourceFiles(orgId: string): Promise<FileBinding[]> {
       conversionDetail: r.conversionDetail,
       columns: JSON.parse(r.columnsJson) as FileBinding["columns"],
       needsReview: r.needsReview,
+      planReason: r.planReason,
     }));
 }
 

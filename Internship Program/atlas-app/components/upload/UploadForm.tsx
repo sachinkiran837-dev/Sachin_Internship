@@ -18,6 +18,14 @@ const KIND_GROUPS = [
   { kind: "visual" as const, label: "Charts & images" },
 ];
 
+/** Starters for the context box — the four things messy client data usually needs said. */
+const CONTEXT_EXAMPLES = [
+  "Consolidate at brand level.",
+  "The structure is in the PDF; the spreadsheet is payroll only.",
+  "Exclude leavers.",
+  "Treat the Entity column as the organisation.",
+];
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -46,6 +54,7 @@ export function UploadForm() {
   const [anonymize, setAnonymize] = useState(true);
   const [selected, setSelected] = useState<File[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [context, setContext] = useState("");
   const [dragging, setDragging] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -100,6 +109,7 @@ export function UploadForm() {
       const data = new FormData();
       data.set("useSample", "off");
       data.set("anonymize", anonymize ? "on" : "off");
+      data.set("context", context);
       for (const id of ids) data.append("uploadId", id);
 
       startSubmit(() => formAction(data));
@@ -301,6 +311,52 @@ export function UploadForm() {
               {unsupported.length === 1 ? "it" : "them"} to continue.
             </p>
           )}
+
+          {/* The one thing the files themselves can never say: what they are
+              to each other. A column list cannot tell Atlas that three brands
+              share one export, or that the chart is the source of truth for
+              reporting lines and the spreadsheet only for money. */}
+          <div className="flex flex-col gap-2 rounded-md border p-3">
+            <Label htmlFor="context">Tell Atlas about these files (optional)</Label>
+            <p className="text-xs text-muted-foreground">
+              Anything that changes how they should be read — how many organisations are in
+              them, which file the structure comes from, which rows are out of scope, what an
+              oddly-named column actually means. Written as you would say it to a colleague.
+            </p>
+
+            <textarea
+              id="context"
+              name="context"
+              rows={3}
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              placeholder="e.g. These cover our three trading brands — consolidate at brand level. The org structure is the PDF; the spreadsheet is payroll only. Ignore anyone whose leaving date has passed."
+              className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
+
+            <div className="flex flex-wrap gap-1.5">
+              {CONTEXT_EXAMPLES.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() =>
+                    setContext((current) => (current.trim() ? `${current.trim()} ${example}` : example))
+                  }
+                  className="rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                >
+                  + {example}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Read by Claude, which decides what each file is for and what its columns mean — it
+              is shown your filenames, column names and a few sample rows. It never touches the
+              rows themselves: the joining, the filtering and every number stay arithmetic. The
+              next screen shows exactly how your instructions were read, and names anything Atlas
+              could not do.
+            </p>
+          </div>
 
           <input
             ref={inputRef}

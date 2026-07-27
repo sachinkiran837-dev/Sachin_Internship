@@ -9,6 +9,7 @@ import { SUPPORTED_FORMATS } from "@/lib/ingest/formats";
 import { readSourceFile } from "@/lib/ingest/readSource";
 import { bindFiles, type SourceFile } from "@/lib/ingest/bindFiles";
 import { buildOrgGraph } from "@/lib/ingest/buildGraph";
+import { planIngest, type IngestPlan } from "@/lib/ingest/plan";
 import {
   createOrg,
   deleteUploads,
@@ -30,6 +31,11 @@ export async function ingestFileAction(
 ): Promise<IngestActionState> {
   const anonymize = formData.get("anonymize") === "on";
   const useSample = formData.get("useSample") === "on";
+  // What the person uploading said about their own files. Free text, because
+  // the things that make client data messy — three brands in one export, the
+  // structure living in a PDF, last year's leavers still in the roster — are
+  // not expressible as checkboxes without knowing them in advance.
+  const context = String(formData.get("context") ?? "").trim();
 
   // Two ways a file can arrive. Normally the browser has already streamed it
   // to /api/upload in chunks and passes the id it was staged under, which is
@@ -91,9 +97,19 @@ export async function ingestFileAction(
     // The staged bytes have been read into memory; nothing needs them again.
     await deleteUploads(uploadIds);
 
+    // Read the instructions *after* the files, because a plan can only be
+    // made against what actually arrived: the planner is shown the real
+    // filenames, the real columns and a few real rows, so it can say "the
+    // brand is the Entity column" rather than inventing a column name. It
+    // decides roles and meanings; every row operation below stays arithmetic.
+    const plan = await planIngest(
+      context,
+      sources.filter((s) => s.parsed).map((s) => ({ filename: s.filename, parsed: s.parsed! }))
+    );
+
     // One file binds to itself, so this path is the same for one upload or
     // ten — no separate single-file branch to drift out of sync.
-    const bound = bindFiles(sources);
+    const bound = bindFiles(sources, plan);
 
     if (bound.rows.length === 0) {
       // Every reason, not just the first — if four files failed for four
@@ -114,9 +130,15 @@ export async function ingestFileAction(
       name: orgNameFor(sources),
       sourceFilename: sources.map((s) => s.filename).join(", "),
       anonymized: anonymize,
+      ingestContext: context,
+      plan,
     });
 
-    const { positions, issues } = await buildOrgGraph(bound, { orgId, anonymize });
+    const { positions, issues } = await buildOrgGraph(bound, {
+      orgId,
+      anonymize,
+      groupBy: bound.groupBy,
+    });
     await savePositions(positions);
 
     // What each file turned out to contain, kept per file so the confirm
@@ -155,6 +177,11 @@ export async function ingestFileAction(
         : []),
     ];
 
+    // Anything the instructions asked for that the files could not support.
+    // These stay unresolved: the user asked for something and did not get it,
+    // which they have to see even if the ingest otherwise looks perfect.
+    const planIssues = planWarnings(orgId, plan, bound.filteredOut);
+
     // Rows a model transcribed from a picture are the one kind of ingest that
     // isn't a reading of someone else's export, so they land in the same
     // low-confidence queue as an unresolved reporting line.
@@ -169,7 +196,7 @@ export async function ingestFileAction(
         resolved: false,
       }));
 
-    await saveIssues([...conversionIssues, ...reviewIssues, ...issues]);
+    await saveIssues([...conversionIssues, ...planIssues, ...reviewIssues, ...issues]);
 
     redirect(`/org/${orgId}`);
   } catch (err) {
@@ -182,6 +209,45 @@ export async function ingestFileAction(
     }
     return { error: `Ingest failed: ${(err as Error).message}` };
   }
+}
+
+/**
+ * The parts of the instructions that could not be honoured, plus the scope
+ * they narrowed. Both belong on the confirm screen: a filter that quietly
+ * removed 300 rows and a filter that was silently ignored look identical
+ * from the map, and they call for opposite responses.
+ */
+function planWarnings(orgId: string, plan: IngestPlan | null, filteredOut: number) {
+  if (!plan) return [];
+
+  const issues = plan.warnings.map((detail) => ({
+    id: randomUUID(),
+    orgId,
+    kind: "conversion" as const,
+    positionId: null,
+    detail: `From your instructions: ${detail}`,
+    resolved: false,
+  }));
+
+  if (filteredOut > 0 && plan.rowFilter) {
+    const { column, include, exclude } = plan.rowFilter;
+    issues.push({
+      id: randomUUID(),
+      orgId,
+      kind: "conversion" as const,
+      positionId: null,
+      detail:
+        `Scope from your instructions: ${filteredOut} row${filteredOut === 1 ? "" : "s"} were left out before anything was bound, ` +
+        `on the "${column}" column — ` +
+        (include.length > 0 ? `keeping only ${include.join(", ")}` : "") +
+        (include.length > 0 && exclude.length > 0 ? ", and " : "") +
+        (exclude.length > 0 ? `dropping ${exclude.join(", ")}` : "") +
+        `. Every count and cost on the following screens is of what remained.`,
+      resolved: true,
+    });
+  }
+
+  return issues;
 }
 
 /** Named after the first file that actually contributed, not the first uploaded. */

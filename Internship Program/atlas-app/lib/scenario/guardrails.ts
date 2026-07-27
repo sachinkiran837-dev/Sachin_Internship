@@ -20,6 +20,21 @@ export function checkProtected(position: Position): GuardResult {
   };
 }
 
+/**
+ * Heading nodes in a consolidated establishment — the brand or entity boxes
+ * everything else hangs under — are scaffolding, not roles. Removing one
+ * would detach an entire brand from the map, and moving one would claim a
+ * reporting line between two legal entities. Neither is a redesign, so both
+ * are refused at the same single point every other mutation passes through.
+ */
+export function checkSynthetic(position: Position): GuardResult {
+  if (!position.synthetic) return { blocked: false };
+  return {
+    blocked: true,
+    reason: `"${position.title}" is a heading Atlas added to hold the consolidated structure together, not a position — there is nothing there to move, remove or cost.`,
+  };
+}
+
 export function checkRoot(positionId: string, rootId: string | null): GuardResult {
   if (positionId === rootId) {
     return { blocked: true, reason: "The top-of-house role can't be dragged or reassigned." };

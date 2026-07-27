@@ -7,6 +7,8 @@ import {
   ChevronDown,
   FileSpreadsheet,
   Link2,
+  MinusCircle,
+  Network,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -36,6 +38,15 @@ const ROLE_COPY: Record<FileBinding["role"], { label: string; blurb: string }> =
     label: "Joined detail",
     blurb: "Matched onto positions from the list above and used to fill in gaps.",
   },
+  structure: {
+    label: "Reporting lines",
+    blurb:
+      "Used for its shape rather than its people: its reporting lines were laid over the establishment, replacing the ones the position list carried.",
+  },
+  excluded: {
+    label: "Left out",
+    blurb: "Left out of this run because your instructions said to. Nothing from it reached the map.",
+  },
   unusable: {
     label: "Not used",
     blurb: "Nothing from this file reached the establishment.",
@@ -51,6 +62,8 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
 
   const rosters = files.filter((f) => f.role === "roster");
   const joined = files.filter((f) => f.role === "attributes");
+  const structure = files.filter((f) => f.role === "structure");
+  const excluded = files.filter((f) => f.role === "excluded");
   const unusable = files.filter((f) => f.role === "unusable");
   const rowsRead = files.reduce((sum, f) => sum + f.rowCount, 0);
 
@@ -63,6 +76,8 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
           {rowsRead === 1 ? "" : "s"} read · {rosters.length} read as position list
           {rosters.length === 1 ? "" : "s"}
           {joined.length > 0 && `, ${joined.length} joined for detail`}
+          {structure.length > 0 && `, ${structure.length} used for reporting lines`}
+          {excluded.length > 0 && `, ${excluded.length} left out on your instructions`}
           {unusable.length > 0 && `, ${unusable.length} not used`}. Select a file for the detail.
         </p>
       </CardHeader>
@@ -82,6 +97,10 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
               >
                 {file.role === "unusable" ? (
                   <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden />
+                ) : file.role === "excluded" ? (
+                  <MinusCircle className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                ) : file.role === "structure" ? (
+                  <Network className="size-4 shrink-0 text-primary" aria-hidden />
                 ) : file.role === "attributes" ? (
                   <Link2 className="size-4 shrink-0 text-primary" aria-hidden />
                 ) : (
@@ -104,7 +123,13 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
                   </Badge>
                 )}
                 <Badge
-                  variant={file.role === "unusable" ? "destructive" : "secondary"}
+                  variant={
+                    file.role === "unusable"
+                      ? "destructive"
+                      : file.role === "excluded"
+                        ? "outline"
+                        : "secondary"
+                  }
                   className="shrink-0"
                 >
                   {copy.label}
@@ -119,8 +144,26 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
                 <div className="flex flex-col gap-4 bg-accent/20 px-6 pb-5 pt-1 text-sm">
                   <p className="text-muted-foreground">{copy.blurb}</p>
 
+                  {file.planReason && (
+                    <Detail label="Why it was read this way">
+                      <span className="italic">&ldquo;{file.planReason}&rdquo;</span> — from your
+                      upload instructions.
+                    </Detail>
+                  )}
+
                   <Detail label="How the file was read">{file.conversionDetail}</Detail>
                   <Detail label="What Atlas did with it">{file.detail}</Detail>
+
+                  {file.role === "structure" && (
+                    <div className="flex flex-wrap gap-x-8 gap-y-2">
+                      <Stat label="Roles matched to the establishment" value={file.matchedRows.toLocaleString()} />
+                      <Stat
+                        label="Not in the position list"
+                        value={file.unmatchedRows.toLocaleString()}
+                        tone={file.unmatchedRows > 0 ? "warn" : undefined}
+                      />
+                    </div>
+                  )}
 
                   {file.role === "attributes" && (
                     <div className="flex flex-wrap gap-x-8 gap-y-2">

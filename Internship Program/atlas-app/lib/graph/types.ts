@@ -17,6 +17,14 @@ export interface Position {
   sourceRowIndex: number;
   confidence: FieldConfidence;
   classificationSource: "ai" | "fallback";
+  /**
+   * A node Atlas added to hold the structure together — a brand or entity
+   * heading when an establishment is consolidated across several of them.
+   * It is not a job and nobody is in it, so it is drawn on the map and
+   * excluded from every count and every cost. Anything that sums positions
+   * must skip these or the headcount is a lie.
+   */
+  synthetic: boolean;
 }
 
 export type IssueKind =

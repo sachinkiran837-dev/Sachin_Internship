@@ -15,7 +15,15 @@ import type {
  * synthesis (C3's narrative layer) depend on — built once here.
  */
 export function computeMetrics(positions: Position[], rootId: string | null): DiagnosticMetrics {
-  const nodes = tagNodes(positions, rootId);
+  const tagged = tagNodes(positions, rootId);
+
+  // A consolidated establishment carries heading nodes — "Northern Brand",
+  // and the node those brands sit under. They exist so the map is one tree
+  // rather than several. They are not jobs: counting them would inflate
+  // headcount, and reading their children as a span of control would invent
+  // a manager with four reports who does not exist. Everything measured here
+  // is measured over real positions only.
+  const nodes = tagged.filter((n) => !n.synthetic);
   const managers = nodes.filter((n) => n.childIds.length > 0);
 
   const protectedByTier: Record<ProtectedTier, number> = {
@@ -27,13 +35,17 @@ export function computeMetrics(positions: Position[], rootId: string | null): Di
     if (n.flags.protected) protectedByTier[n.flags.protected.tier] += 1;
   }
 
+  const depths = nodes.map((n) => n.depth);
+
   return {
     headcount: nodes.length,
     filledCount: nodes.filter((n) => n.status === "filled").length,
     vacantCount: nodes.filter((n) => n.status === "vacant").length,
     contingentCount: nodes.filter((n) => n.status === "contingent").length,
     totalCost: nodes.reduce((sum, n) => sum + n.cost * n.fte, 0),
-    layers: nodes.length === 0 ? 0 : Math.max(...nodes.map((n) => n.depth)) + 1,
+    // Depth is measured from the top of the real structure, so the heading
+    // nodes above it don't read as an extra management layer.
+    layers: nodes.length === 0 ? 0 : Math.max(...depths) - Math.min(...depths) + 1,
     averageSpan:
       managers.length === 0
         ? 0

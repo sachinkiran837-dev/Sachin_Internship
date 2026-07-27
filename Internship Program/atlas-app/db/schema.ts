@@ -6,6 +6,10 @@ export const orgs = pgTable("orgs", {
   anonymized: boolean("anonymized").notNull().default(true),
   sourceFilename: text("source_filename").notNull(),
   createdAt: text("created_at").notNull(),
+  /** The instructions typed on the upload screen, verbatim. */
+  ingestContext: text("ingest_context"),
+  /** JSON IngestPlan — how those instructions were read, and what was ignored. */
+  planJson: text("plan_json"),
 });
 
 export const positions = pgTable("positions", {
@@ -23,6 +27,8 @@ export const positions = pgTable("positions", {
   sourceRowIndex: integer("source_row_index").notNull(),
   confidenceJson: text("confidence_json").notNull().default("{}"),
   classificationSource: text("classification_source").notNull().default("fallback"),
+  /** A heading Atlas added to consolidate the map — not a job. See Position.synthetic. */
+  synthetic: boolean("synthetic").notNull().default(false),
 });
 
 export const ingestIssues = pgTable("ingest_issues", {
@@ -71,6 +77,8 @@ export const sourceFiles = pgTable("source_files", {
   conversionDetail: text("conversion_detail").notNull().default(""),
   detail: text("detail").notNull(),
   needsReview: boolean("needs_review").notNull().default(false),
+  /** Why the upload instructions put this file in this role, in the planner's words. */
+  planReason: text("plan_reason"),
   /** Upload order, so the report reads back the way the files were added. */
   orderIndex: integer("order_index").notNull().default(0),
 });

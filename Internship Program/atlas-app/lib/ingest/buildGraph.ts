@@ -14,6 +14,13 @@ import type {
 export interface BuildGraphOptions {
   orgId: string;
   anonymize: boolean;
+  /**
+   * Consolidate the establishment on one column — brand, entity, region.
+   * Each distinct value gets a heading node, and every role that would
+   * otherwise float to the top of the map hangs under its own heading
+   * instead of under whichever role happened to be picked as the root.
+   */
+  groupBy?: { column: string; label: string; topLabel: string } | null;
 }
 
 export interface BuildGraphResult {
@@ -70,6 +77,40 @@ interface RawRow {
   cost: number;
   fte: number;
   status: PositionStatus;
+  /** Value of the consolidation column for this row; "" when not consolidating. */
+  group: string;
+}
+
+/**
+ * A heading node: the "Northern Brand" box that three separate hierarchies
+ * hang under once an establishment is consolidated. It is drawn like a
+ * position because the map only draws positions, but it costs nothing, holds
+ * nobody, and is excluded from every metric — see `synthetic` on Position.
+ */
+function syntheticNode(
+  id: string,
+  orgId: string,
+  label: string,
+  department: string,
+  managerId: string | null
+): Position {
+  return {
+    id,
+    orgId,
+    rawName: null,
+    displayName: label,
+    title: label,
+    department,
+    managerId,
+    cost: 0,
+    fte: 0,
+    status: "filled",
+    clinicalFlag: false,
+    sourceRowIndex: -1,
+    confidence: { name: 1, title: 1, department: 1, manager: 1, classification: 1 },
+    classificationSource: "fallback",
+    synthetic: true,
+  };
 }
 
 export async function buildOrgGraph(
@@ -135,6 +176,7 @@ export async function buildOrgGraph(
       cost: costCol ? parseCost(row[costCol]) : 0,
       fte: fteCol ? parseFte(row[fteCol]) : 1,
       status: statusCol ? parseStatus(row[statusCol]) : "filled",
+      group: options.groupBy ? (row[options.groupBy.column] ?? "").trim() : "",
     });
   });
 
@@ -179,36 +221,114 @@ export async function buildOrgGraph(
     return { row, id, managerId: null, managerConfidence: 0.3, orphan: true };
   });
 
+  // --- consolidation ------------------------------------------------------
+  // Several brands, entities or sites in one upload arrive as several
+  // unconnected hierarchies. Without this they are forced into one by picking
+  // whichever chief executive appeared first and hanging the other brands'
+  // leadership under them — a reporting line that does not exist. Grouping
+  // gives each its own heading and puts the headings under one node, so the
+  // map is a single tree that still says which brand each part belongs to.
+  const syntheticPositions: Position[] = [];
+  const groupNodeId = new Map<string, string>();
+  let topNodeId: string | null = null;
+
+  const groupValues = options.groupBy
+    ? [...new Set(rawRows.map((r) => r.group).filter((v) => v !== ""))]
+    : [];
+
+  if (options.groupBy && groupValues.length >= 2) {
+    const { label, topLabel, column } = options.groupBy;
+    topNodeId = randomUUID();
+    syntheticPositions.push(syntheticNode(topNodeId, options.orgId, topLabel, "—", null));
+
+    for (const value of groupValues) {
+      const id = randomUUID();
+      groupNodeId.set(value, id);
+      syntheticPositions.push(syntheticNode(id, options.orgId, value, value, topNodeId));
+    }
+
+    const ungrouped = rawRows.filter((r) => r.group === "").length;
+    issues.push({
+      id: randomUUID(),
+      orgId: options.orgId,
+      kind: "conversion",
+      positionId: null,
+      detail:
+        `Consolidated at ${label.toLowerCase()} level on the "${column}" column: ${groupValues.length} ` +
+        `${label.toLowerCase()}s — ${groupValues.join(", ")} — each given a heading under "${topLabel}". ` +
+        `Those ${groupValues.length + 1} headings are structure, not jobs: they hold no one, cost nothing, ` +
+        `and are left out of every count on the following screens.` +
+        (ungrouped > 0
+          ? ` ${ungrouped} row${ungrouped === 1 ? " has" : "s have"} no value in that column and ${ungrouped === 1 ? "sits" : "sit"} directly under "${topLabel}".`
+          : ""),
+      resolved: true,
+    });
+  } else if (options.groupBy) {
+    issues.push({
+      id: randomUUID(),
+      orgId: options.orgId,
+      kind: "conversion",
+      positionId: null,
+      detail:
+        `Atlas was asked to consolidate at ${options.groupBy.label.toLowerCase()} level on the ` +
+        `"${options.groupBy.column}" column, but ${groupValues.length === 1 ? `every row carries the same value ("${groupValues[0]}")` : "no row carries a value"} — ` +
+        `there was nothing to consolidate, so the establishment was built as one structure.`,
+      resolved: true,
+    });
+  }
+
+  const headingFor = (r: { row: RawRow }): string | null =>
+    topNodeId === null ? null : (groupNodeId.get(r.row.group) ?? topNodeId);
+
   // Pick the root: prefer a title match on chief-executive keywords among
   // the no-manager rows; otherwise the first no-manager row. Every other
   // no-manager row is an unresolved orphan needing attachment, but the
-  // chosen root is never counted as one.
+  // chosen root is never counted as one. When consolidating, the root is the
+  // top heading instead, and every natural top-of-tree keeps its seniority
+  // under its own heading rather than being demoted under a peer.
   const noManagerRows = resolved.filter((r) => r.managerId === null && !r.orphan);
-  const rootEntry =
-    noManagerRows.find((r) =>
-      CHIEF_EXECUTIVE_KEYWORDS.some((k) => r.row.title.toLowerCase().includes(k))
-    ) ?? noManagerRows[0];
+  let rootEntry: Resolved | undefined;
 
-  if (rootEntry) {
+  if (topNodeId !== null) {
     for (const r of noManagerRows) {
-      if (r.id !== rootEntry.id) r.orphan = true;
+      r.managerId = headingFor(r);
+      r.managerConfidence = 0.8;
+    }
+  } else {
+    rootEntry =
+      noManagerRows.find((r) =>
+        CHIEF_EXECUTIVE_KEYWORDS.some((k) => r.row.title.toLowerCase().includes(k))
+      ) ?? noManagerRows[0];
+
+    if (rootEntry) {
+      for (const r of noManagerRows) {
+        if (r.id !== rootEntry.id) r.orphan = true;
+      }
     }
   }
 
   // Attach orphans: prefer another already-anchored, management-looking
-  // position in the same department; otherwise lift to root.
+  // position in the same department; otherwise lift to root — or, when
+  // consolidating, to the heading for that row's own group, so an orphan in
+  // one brand is never quietly parented into another.
   const anchored = resolved.filter((r) => !r.orphan && r.managerId !== null);
 
   for (const r of resolved) {
     if (!r.orphan) continue;
 
     const deptManager = anchored.find(
-      (a) => a.row.department === r.row.department && looksLikeManagement(a.row.title)
+      (a) =>
+        a.row.department === r.row.department &&
+        (topNodeId === null || a.row.group === r.row.group) &&
+        looksLikeManagement(a.row.title)
     );
 
     if (deptManager) {
       r.managerId = deptManager.id;
       r.managerConfidence = 0.4;
+    } else if (topNodeId !== null) {
+      r.managerId = headingFor(r);
+      r.managerConfidence = 0.3;
     } else if (rootEntry && r.id !== rootEntry.id) {
       r.managerId = rootEntry.id;
       r.managerConfidence = 0.3;
@@ -223,7 +343,11 @@ export async function buildOrgGraph(
       kind: "orphan",
       positionId: r.id,
       detail: `"${r.row.title}" (${r.row.rawName}) had no resolvable manager — ${
-        deptManager ? `attached to ${deptManager.row.title} by department` : "lifted to the top"
+        deptManager
+          ? `attached to ${deptManager.row.title} by department`
+          : topNodeId !== null
+            ? `placed under its ${options.groupBy!.label.toLowerCase()} heading`
+            : "lifted to the top"
       }. Confirm on the next screen.`,
       resolved: false,
     });
@@ -237,7 +361,7 @@ export async function buildOrgGraph(
     let cursor: Resolved | undefined = r;
     while (cursor?.managerId) {
       if (visited.has(cursor.id)) {
-        r.managerId = rootEntry ? rootEntry.id : null;
+        r.managerId = topNodeId !== null ? headingFor(r) : (rootEntry?.id ?? null);
         issues.push({
           id: randomUUID(),
           orgId: options.orgId,
@@ -298,9 +422,11 @@ export async function buildOrgGraph(
         sourceRowIndex: r.row.sourceRowIndex,
         confidence,
         classificationSource: classification.source,
+        synthetic: false,
       } satisfies Position;
     })
   );
 
-  return { positions, issues, columnMapping };
+  // Headings first, so the root of the map is the first row with no manager.
+  return { positions: [...syntheticPositions, ...positions], issues, columnMapping };
 }

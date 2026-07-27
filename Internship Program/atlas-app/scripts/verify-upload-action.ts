@@ -14,7 +14,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ingestFileAction } from "../app/actions/ingest";
-import { getBaselinePositions, getIssues, getSourceFiles, listOrgs } from "../db/repo";
+import { getBaselinePositions, getIngestPlan, getIssues, getSourceFiles, listOrgs } from "../db/repo";
+import { hasAI } from "../lib/ai/client";
 import { computeMetrics } from "../lib/metrics/diagnostics";
 
 async function loadFile(name: string): Promise<File> {
@@ -211,6 +212,48 @@ async function main() {
       report.map((r) => `${r.filename} [${r.role}, ${r.columns.length} cols]`).join(", ")
   );
   console.log(`   unreadable files are listed too: handbook.rtf [${unusableRow.role}]`);
+
+  // --- 5. the upload instructions survive the round trip ----------------
+  // The context box is only worth having if what the user typed is still
+  // attached to the establishment afterwards — and if the reading of it, or
+  // the reason there wasn't one, is stored beside it rather than lost.
+  const INSTRUCTION =
+    "These cover our three trading brands — consolidate at brand level. The structure is in the PDF.";
+
+  const withContext = new FormData();
+  withContext.set("file", await loadFile("sample-establishment.csv"));
+  withContext.set("anonymize", "on");
+  withContext.set("useSample", "off");
+  withContext.set("context", INSTRUCTION);
+  await runAction(withContext);
+
+  orgs = await listOrgs();
+  const contextOrg = orgs[orgs.length - 1];
+  if (contextOrg.ingestContext !== INSTRUCTION) {
+    throw new Error(`the instructions were not stored verbatim: ${contextOrg.ingestContext}`);
+  }
+
+  const storedPlan = await getIngestPlan(contextOrg.id);
+  if (!storedPlan) {
+    throw new Error("a context was given, so how it was read must be stored — even if it wasn't");
+  }
+  if (hasAI()) {
+    if (storedPlan.source !== "ai") {
+      throw new Error(`with a key set, the plan should have been read: ${storedPlan.source}`);
+    }
+    console.log(`5. instructions stored and read by ${storedPlan.model}: "${storedPlan.notes.slice(0, 90)}…"`);
+  } else {
+    if (storedPlan.source !== "unavailable") {
+      throw new Error(`without a key, the plan must record why: ${storedPlan.source}`);
+    }
+    if (!storedPlan.notes.includes("ANTHROPIC_API_KEY")) {
+      throw new Error(`the stored plan must say why it wasn't applied: ${storedPlan.notes}`);
+    }
+    console.log(
+      `5. instructions stored verbatim; recorded as not applied (source="${storedPlan.source}"), ` +
+        `with the reason the confirm screen shows: "${storedPlan.notes.slice(0, 72)}…"`
+    );
+  }
 
   console.log("PASSED");
 }
