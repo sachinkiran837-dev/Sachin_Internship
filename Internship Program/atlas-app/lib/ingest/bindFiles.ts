@@ -1,6 +1,8 @@
 import { mapColumns } from "./columnMapper";
 import type { ConversionReport, ParsedFile } from "./parseFile";
-import type { FileUse, IngestPlan, RowFilter } from "./plan";
+import { matchHeader, type FileUse, type IngestPlan, type RowFilter } from "./plan";
+import { EMPTY_ANSWERS, mapValue, type IngestAnswers } from "./answers";
+import { note, type IngestNote } from "./notes";
 import { CANONICAL_FIELDS, type ColumnMapping } from "@/lib/graph/types";
 
 /**
@@ -81,6 +83,13 @@ export interface BoundDataset extends ParsedFile {
   bindings: FileBinding[];
   /** The consolidation column, resolved to the name it carries in `rows`. */
   groupBy: { column: string; label: string; topLabel: string } | null;
+  /**
+   * Every distinct value of the consolidation column, and which files it was
+   * seen in. Two files that name the same brand differently show up here as
+   * two values each seen in one file, which is what makes the mismatch
+   * detectable at all rather than silently doubling the groups on the map.
+   */
+  groupValues: { value: string; files: string[]; count: number }[];
   /** Rows dropped before binding because the plan restricted the scope. */
   filteredOut: number;
 }
@@ -126,6 +135,8 @@ interface NormalisedFile {
   planReason: string | null;
   /** Rows this file lost to the plan's scope filter. */
   filteredOut: number;
+  /** This file's own name for the consolidation column, if it carries one. */
+  groupColumn: string | null;
 }
 
 const key = (v: string) => v.trim().toLowerCase();
@@ -136,7 +147,11 @@ const key = (v: string) => v.trim().toLowerCase();
  * Unmapped columns keep their original header — they may be exactly the
  * client-specific field someone wants to see later.
  */
-function normalise(file: ReadableFile, plan: IngestPlan | null): NormalisedFile {
+function normalise(
+  file: ReadableFile,
+  plan: IngestPlan | null,
+  answers: IngestAnswers
+): NormalisedFile {
   const filePlan = plan?.files.find((f) => f.filename === file.filename) ?? null;
   const mapping = applyOverrides(mapColumns(file.parsed.headers), filePlan?.columns ?? {});
 
@@ -158,13 +173,31 @@ function normalise(file: ReadableFile, plan: IngestPlan | null): NormalisedFile 
   // that is the name the user and the planner both saw.
   const kept = applyFilter(file.parsed.rows, plan?.rowFilter ?? null);
 
+  // The consolidation dimension is read off this file's own column and
+  // written into one column shared by every file — otherwise a payroll
+  // extract calling it "Source Brand" and a staff list calling it "BRAND"
+  // would produce two half-empty columns and consolidating on either would
+  // leave the other file's people ungrouped.
+  const groupColumn = plan?.groupBy
+    ? (plan.groupBy.columns.map((c) => matchHeader(c, file.parsed.headers)).find(Boolean) ?? null)
+    : null;
+  const groupLabel = plan?.groupBy?.label ?? null;
+
   const rows = kept.rows.map((row) => {
     const out: Record<string, string> = {};
     for (const [col, value] of Object.entries(row)) {
       out[rename.get(col) ?? col] = value;
     }
+    if (groupColumn && groupLabel) {
+      // Vocabularies the client has already reconciled are applied here, at
+      // the one place the raw value is still in hand.
+      const raw = (row[groupColumn] ?? "").trim();
+      if (raw) out[groupLabel] = mapValue(answers, groupLabel, raw);
+    }
     return out;
   });
+
+  if (groupColumn && groupLabel && !extras.includes(groupLabel)) extras.push(groupLabel);
 
   const columns = mapping.map((m) => ({ column: m.sourceColumn, field: m.targetField }));
 
@@ -178,6 +211,7 @@ function normalise(file: ReadableFile, plan: IngestPlan | null): NormalisedFile 
     use: filePlan?.use ?? null,
     planReason: filePlan?.reason?.trim() || null,
     filteredOut: kept.dropped,
+    groupColumn,
   };
 }
 
@@ -259,7 +293,11 @@ function payloadFields(f: NormalisedFile, joinKey: CanonicalField): string[] {
   return [...[...f.fields].filter((x) => x !== joinKey), ...f.extras];
 }
 
-export function bindFiles(files: SourceFile[], plan: IngestPlan | null = null): BoundDataset {
+export function bindFiles(
+  files: SourceFile[],
+  plan: IngestPlan | null = null,
+  answers: IngestAnswers = EMPTY_ANSWERS
+): BoundDataset {
   if (files.length === 0) {
     throw new Error("No files to bind.");
   }
@@ -295,6 +333,7 @@ export function bindFiles(files: SourceFile[], plan: IngestPlan | null = null): 
       rows: [],
       bindings,
       groupBy: null,
+      groupValues: [],
       filteredOut: 0,
       conversion: {
         sourceFormat: "—",
@@ -304,7 +343,7 @@ export function bindFiles(files: SourceFile[], plan: IngestPlan | null = null): 
     };
   }
 
-  const normalised = readable.map((f) => normalise(f, plan));
+  const normalised = readable.map((f) => normalise(f, plan, answers));
 
   // --- what each file is for --------------------------------------------
   for (const f of normalised.filter((f) => f.use === "ignore")) {
@@ -502,8 +541,11 @@ export function bindFiles(files: SourceFile[], plan: IngestPlan | null = null): 
   }
 
   // --- lay the structure files over the establishment ---------------------
+  const bindNotes: IngestNote[] = [];
   for (const f of structureFiles) {
-    bindings.push(overlayStructure(f, coreRows, coreFields, coreExtras, inferredStructure.has(f)));
+    bindings.push(
+      overlayStructure(f, coreRows, coreFields, coreExtras, inferredStructure.has(f), bindNotes)
+    );
   }
 
   const headers = [
@@ -525,20 +567,24 @@ export function bindFiles(files: SourceFile[], plan: IngestPlan | null = null): 
     (a, b) => (uploadOrder.get(a.filename) ?? 0) - (uploadOrder.get(b.filename) ?? 0)
   );
 
+  const groupBy = resolveGroupBy(plan, headers);
+
   return {
     headers,
     rows,
     bindings,
-    groupBy: resolveGroupBy(plan, headers),
+    groupBy,
+    groupValues: groupBy ? countGroupValues(normalised, groupBy.column) : [],
+    notes: [...readable.flatMap((f) => f.parsed.notes ?? []), ...bindNotes],
     filteredOut: normalised.reduce((sum, f) => sum + f.filteredOut, 0),
     conversion: summarise(readable, files.length, bindings, rows.length),
   };
 }
 
 /**
- * The consolidation column has to be named as it appears in the bound rows,
- * not as it appeared in the file: a column the mapper recognised has already
- * been renamed to its canonical field by the time the graph builder sees it.
+ * The consolidation column, named as it appears in the bound rows. Normally
+ * that is the plan's label, because `normalise` coalesces every file's own
+ * column into one under that name.
  */
 function resolveGroupBy(
   plan: IngestPlan | null,
@@ -546,16 +592,46 @@ function resolveGroupBy(
 ): BoundDataset["groupBy"] {
   if (!plan?.groupBy) return null;
 
-  const { column, label, topLabel } = plan.groupBy;
-  if (headers.includes(column)) return { column, label, topLabel };
+  const { label, topLabel, columns } = plan.groupBy;
+  if (headers.includes(label)) return { column: label, label, topLabel };
 
-  // The column survived under its canonical name — "Division" as `department`.
-  const canonical = mapColumns([column])[0]?.targetField ?? null;
-  if (canonical && headers.includes(canonical)) {
-    return { column: canonical, label, topLabel };
+  // No file carried the dimension after binding — the column may have been
+  // recognised as a canonical field and renamed ("Division" as `department`).
+  for (const column of columns) {
+    if (headers.includes(column)) return { column, label, topLabel };
+    const canonical = mapColumns([column])[0]?.targetField ?? null;
+    if (canonical && headers.includes(canonical)) return { column: canonical, label, topLabel };
   }
 
   return null;
+}
+
+/**
+ * Every value of the consolidation column and the files it appeared in.
+ * Counted per file rather than off the bound rows, because the whole point is
+ * to notice that one file says "365 Care" and another says "365C" — which is
+ * invisible once the rows are in one pile.
+ */
+function countGroupValues(
+  normalised: NormalisedFile[],
+  column: string
+): BoundDataset["groupValues"] {
+  const seen = new Map<string, { files: Set<string>; count: number }>();
+
+  for (const f of normalised) {
+    for (const row of f.rows) {
+      const value = (row[column] ?? "").trim();
+      if (!value) continue;
+      const entry = seen.get(value) ?? { files: new Set<string>(), count: 0 };
+      entry.files.add(f.filename);
+      entry.count++;
+      seen.set(value, entry);
+    }
+  }
+
+  return [...seen.entries()]
+    .map(([value, e]) => ({ value, files: [...e.files], count: e.count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -582,8 +658,10 @@ function overlayStructure(
   coreFields: Set<CanonicalField>,
   coreExtras: string[],
   /** True when Atlas chose this role itself rather than being told to. */
-  inferred: boolean
+  inferred: boolean,
+  notes: IngestNote[]
 ): FileBinding {
+  const establishmentSize = coreRows.length;
   const byId = new Map<string, Record<string, string>>();
   const byName = new Map<string, Record<string, string>>();
   const titleCounts = new Map<string, number>();
@@ -707,6 +785,35 @@ function overlayStructure(
   }
   if (added > 0) {
     for (const extra of f.extras) if (!coreExtras.includes(extra)) coreExtras.push(extra);
+  }
+
+  // The chart and the spreadsheets are two accounts of one organisation, and
+  // they disagree. Which way they disagree is the finding: roles drawn but
+  // not paid are usually a chart drawn at a different date, and people paid
+  // but not drawn are usually a chart that only ever covered head office.
+  // Atlas states both counts and neither reconciles them, because deciding
+  // which document is right is the client's call, not a reader's.
+  const notOnChart = establishmentSize - matched;
+  if (notOnChart > 0 || added > 0) {
+    notes.push(
+      note("structure-coverage", "question", {
+        topic: "Chart against payroll",
+        statement: `The structure in "${f.filename}" and the position lists beside it do not describe the same set of people, and Atlas has kept both rather than choosing.`,
+        evidence:
+          `${matched.toLocaleString()} of the chart's ${f.rows.length.toLocaleString()} roles were matched to someone in the position lists. ` +
+          (added > 0
+            ? `${added.toLocaleString()} role${added === 1 ? " was" : "s were"} drawn on the chart but appear in no spreadsheet, and ${added === 1 ? "was" : "were"} added with no cost. `
+            : "") +
+          (notOnChart > 0
+            ? `${notOnChart.toLocaleString()} people are in the spreadsheets but nowhere on the chart, so nothing states who they report to.`
+            : ""),
+        effect:
+          (notOnChart > 0
+            ? `Those ${notOnChart.toLocaleString()} attach where Atlas can best place them rather than where the organisation puts them, which distorts spans of control and layer counts. `
+            : "") +
+          `Tell Atlas which document is current, or supply the reporting lines for the people the chart doesn't cover.`,
+      })
+    );
   }
 
   return baseBinding(f, {

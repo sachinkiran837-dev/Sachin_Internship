@@ -1,10 +1,19 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
-import { getBaselinePositions, getIngestPlan, getIssues, getOrg, getSourceFiles } from "@/db/repo";
+import {
+  getBaselinePositions,
+  getIngestPlan,
+  getIssues,
+  getNotes,
+  getOrg,
+  getSourceFiles,
+  hasSourceBlobs,
+} from "@/db/repo";
 import { OrgNav } from "@/components/OrgNav";
 import { SourceDataReport } from "@/components/ingest/SourceDataReport";
 import { PlanReport } from "@/components/ingest/PlanReport";
+import { IngestNotes } from "@/components/ingest/IngestNotes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +46,8 @@ export default async function OrgConfirmPage({
   const issues = await getIssues(orgId);
   const sourceFiles = await getSourceFiles(orgId);
   const plan = await getIngestPlan(orgId);
+  const notes = await getNotes(orgId);
+  const canReread = await hasSourceBlobs(orgId);
 
   // How complete the establishment actually is, field by field. The headline
   // count says how many rows arrived; this says how much of each row is
@@ -97,6 +108,10 @@ export default async function OrgConfirmPage({
             <Button>Open establishment map</Button>
           </Link>
         </div>
+
+        {/* Before anything else on this screen, because everything else on it
+            is downstream of these. */}
+        <IngestNotes orgId={orgId} notes={notes} canReread={canReread} />
 
         {conversions.length > 0 && (
           <div className="rounded-md border border-primary/30 bg-accent/40 px-4 py-3">

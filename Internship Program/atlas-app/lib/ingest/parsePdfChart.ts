@@ -1,5 +1,6 @@
 import type { ParsedFile } from "./parseFile";
 import type { PdfContent, Rect, Segment, TextRun } from "./parsePdf";
+import { note, type IngestNote } from "./notes";
 
 /**
  * Reads a *drawn* org chart out of a PDF — boxes joined by connector lines,
@@ -108,14 +109,45 @@ export function parsePdfChart(filename: string, content: PdfContent): ParsedFile
     }));
   });
 
+  // A box with several names under one title is drawn that way on purpose —
+  // it is how a chart says "these four people do this job and report here".
+  // Atlas keeps them as four positions rather than collapsing them, and says
+  // so, because the alternative silently deletes three people.
+  const shared = boxes
+    .map((box) => ({ box, split: splitBox(box.lines) }))
+    .filter(({ split }) => split.names.length > 1);
+  const notes: IngestNote[] = shared.length
+    ? [
+        note("shared-boxes", "assumption", {
+          topic: "Boxes holding several people",
+          statement: `${shared.length} boxes on this chart list more than one name under a single job title, and Atlas kept every name as its own position.`,
+          evidence:
+            `${shared.reduce((n, s) => n + s.split.names.length, 0)} people sit in those ${shared.length} boxes — ` +
+            shared
+              .slice(0, 3)
+              .map((s) => `"${s.split.title || "untitled"}" (${s.split.names.length})`)
+              .join(", ") +
+            (shared.length > 3 ? ", and others" : "") +
+            `. They share the title and the reporting line the box was drawn with.`,
+          effect:
+            `Headcount counts each of them. Collapsing each box to one position instead would have removed ` +
+            `${shared.reduce((n, s) => n + s.split.names.length - 1, 0)} people from the establishment.`,
+        }),
+      ]
+    : [];
+
   return {
     headers,
     rows,
+    notes,
     conversion: {
       sourceFormat: "PDF",
       detail:
         `Read as a drawn structure chart, not a table: ${boxes.length} boxes holding ${rows.length} ` +
-        `role${rows.length === 1 ? "" : "s"}, with reporting lines worked out ${method}.`,
+        `role${rows.length === 1 ? "" : "s"}, with reporting lines worked out ${method}` +
+        (shared.length > 0
+          ? `, ${shared.length} of them listing several people under one title — each kept as its own position.`
+          : "."),
       rowCount: rows.length,
       needsReview:
         `The structure in "${filename}" was drawn, not tabulated, so Atlas worked the reporting lines out ${method} ` +

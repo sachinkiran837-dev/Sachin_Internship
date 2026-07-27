@@ -81,8 +81,14 @@ export function PlanReport({ context, plan }: { context: string; plan: IngestPla
                   Consolidated at <strong className="font-medium text-foreground">
                     {plan.groupBy.label.toLowerCase()}
                   </strong>{" "}
-                  level, on the <span className="font-mono text-xs">{plan.groupBy.column}</span>{" "}
-                  column. Each one has a heading under &ldquo;{plan.groupBy.topLabel}&rdquo;;
+                  level, on the{" "}
+                  {plan.groupBy.columns.map((column, i) => (
+                    <span key={column}>
+                      {i > 0 && (i === plan.groupBy!.columns.length - 1 ? " and " : ", ")}
+                      <span className="font-mono text-xs">{column}</span>
+                    </span>
+                  ))}{" "}
+                  column{plan.groupBy.columns.length === 1 ? "" : "s"}. Each one has a heading under &ldquo;{plan.groupBy.topLabel}&rdquo;;
                   those headings are structure, not jobs, and are left out of every count.
                 </span>
               </p>

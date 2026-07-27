@@ -10,6 +10,54 @@ export const orgs = pgTable("orgs", {
   ingestContext: text("ingest_context"),
   /** JSON IngestPlan — how those instructions were read, and what was ignored. */
   planJson: text("plan_json"),
+  /** JSON IngestAnswers — what the client corrected after seeing the first read. */
+  answersJson: text("answers_json"),
+  /** How many times this establishment has been re-read with new answers. */
+  revision: integer("revision").notNull().default(0),
+});
+
+/**
+ * What Atlas assumed, and what it refused to assume.
+ *
+ * Kept apart from `ingest_issues` because the two call for opposite things.
+ * An issue is a defect in the data — a duplicate ID, an unresolved manager —
+ * and the reader's job is to notice it. A note is a limit of the *reading*,
+ * and the reader is the only one who can lift it: the client answers, and the
+ * establishment is read again with the answer applied.
+ */
+export const ingestNotes = pgTable("ingest_notes", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  /** Stable across re-reads, so an answer stays attached to its question. */
+  noteKey: text("note_key").notNull(),
+  /** assumption | question */
+  kind: text("kind").notNull(),
+  topic: text("topic").notNull(),
+  statement: text("statement").notNull(),
+  evidence: text("evidence").notNull(),
+  effect: text("effect").notNull(),
+  /** hours | mapping | none — what kind of answer would close it. */
+  answerKind: text("answer_kind").notNull().default("none"),
+  /** JSON NoteOption[] — values needing a decision, with Atlas's proposal. */
+  optionsJson: text("options_json").notNull().default("[]"),
+  answeredWith: text("answered_with"),
+  orderIndex: integer("order_index").notNull().default(0),
+});
+
+/**
+ * The uploaded bytes, kept so answering a question can re-read the same files
+ * rather than asking the client to find and upload them again. Re-reading is
+ * the only honest way to apply an answer: a paid-hours figure changes what
+ * every row costs, and patching the saved positions instead would leave the
+ * per-file report describing a read that no longer matches the map.
+ */
+export const sourceBlobs = pgTable("source_blobs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  filename: text("filename").notNull(),
+  /** Base64 of the original file, exactly as uploaded. */
+  data: text("data").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
 });
 
 export const positions = pgTable("positions", {
@@ -118,3 +166,5 @@ export type AuditLogRow = typeof auditLog.$inferSelect;
 export type IngestIssueRow = typeof ingestIssues.$inferSelect;
 export type UploadChunkRow = typeof uploadChunks.$inferSelect;
 export type SourceFileRow = typeof sourceFiles.$inferSelect;
+export type IngestNoteRow = typeof ingestNotes.$inferSelect;
+export type SourceBlobRow = typeof sourceBlobs.$inferSelect;

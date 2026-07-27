@@ -1,5 +1,5 @@
-import ingestAssumptions from "@/config/ingest-assumptions.json";
 import { composeColumns } from "./composeColumns";
+import { EMPTY_ANSWERS, type IngestAnswers } from "./answers";
 import { formatFor, unsupportedMessage } from "./formats";
 import { parseDocxFile } from "./parseDocument";
 import { parseEstablishmentFile, UnsupportedFileError, type ParsedFile } from "./parseFile";
@@ -14,7 +14,18 @@ import { hasAI } from "@/lib/ai/client";
  * regardless of whether the source was a spreadsheet, a Word table or a photo
  * of a whiteboard.
  */
-export async function readSourceFile(filename: string, buffer: Buffer): Promise<ParsedFile> {
+export async function readSourceFile(
+  filename: string,
+  buffer: Buffer,
+  /**
+   * What the client has already told Atlas about their own data, from an
+   * earlier run of this same establishment. Only ever *adds* what the file
+   * couldn't say for itself — a paid-hours figure that lets an hourly rate
+   * become a cost. With no answers, the file is read on its own evidence and
+   * whatever that leaves open is raised as a question rather than filled in.
+   */
+  answers: IngestAnswers = EMPTY_ANSWERS
+): Promise<ParsedFile> {
   const format = formatFor(filename);
 
   if (!format) {
@@ -31,7 +42,7 @@ export async function readSourceFile(filename: string, buffer: Buffer): Promise<
   // whole name where the file holds a first and a last, an annual cost where
   // it holds an hourly rate — are built here, once, so every reader benefits
   // and nothing downstream has to know they were built.
-  return composeColumns(parsed, ingestAssumptions);
+  return composeColumns(parsed, answers, filename);
 }
 
 function read(

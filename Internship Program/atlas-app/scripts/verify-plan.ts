@@ -259,7 +259,7 @@ async function main() {
   // --- 6. consolidation at brand level -----------------------------------
   const consolidated = bindFiles(
     [PAYROLL],
-    plan({ groupBy: { column: "Brand", label: "Brand", topLabel: "Meridian Group" } })
+    plan({ groupBy: { columns: ["Brand"], label: "Brand", topLabel: "Meridian Group" } })
   );
   assert(consolidated.groupBy?.column === "Brand", "the grouping column must survive into the bound dataset");
 

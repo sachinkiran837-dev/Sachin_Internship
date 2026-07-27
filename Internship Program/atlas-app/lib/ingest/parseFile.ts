@@ -1,11 +1,18 @@
 import * as XLSX from "xlsx";
 import { formatFor, unsupportedMessage } from "./formats";
+import type { IngestNote } from "./notes";
 
 export interface ParsedFile {
   headers: string[];
   rows: Record<string, string>[];
   /** How the source was recognised and normalised — surfaced in the UI, never silent. */
   conversion: ConversionReport;
+  /**
+   * What reading this file forced Atlas to assume, and what it refused to
+   * assume and needs answering. Raised on the confirm screen before the map.
+   * See `lib/ingest/notes.ts`.
+   */
+  notes?: IngestNote[];
 }
 
 export interface ConversionReport {

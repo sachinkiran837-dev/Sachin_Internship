@@ -19,7 +19,8 @@ import { mapColumns } from "../lib/ingest/columnMapper";
 import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
 import { buildOrgGraph } from "../lib/ingest/buildGraph";
 import { computeMetrics } from "../lib/metrics/diagnostics";
-import assumptions from "../config/ingest-assumptions.json";
+import { EMPTY_ANSWERS } from "../lib/ingest/answers";
+import { costCoverage } from "../lib/ingest/reconcile";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`);
@@ -167,7 +168,8 @@ function frontlineSheet(brand: string, ids: number[]): string[][] {
       `First${n}`,
       `Last${n}`,
       i % 3 === 0 ? "Support Worker" : "Care Companion",
-      // Casuals are recorded at zero FTE: no guaranteed hours, not no work.
+      // Zero FTE is a real value here, not a gap — these workforces record
+      // agency staff that way. Atlas reads the column as it stands.
       i % 2 === 0 ? "0.0" : "0.8",
       "34.42",
       "Hourly",
@@ -236,25 +238,47 @@ async function main() {
   );
   console.log(`2. Names: "FirstName" + "Surname" → "${read.rows[0]["Employee Name"]}", and it wins the name field.`);
 
-  // --- 3. an hourly rate is annualised, with the assumption stated -------
-  const { fullTimeHoursPerWeek, casualHoursPerWeek, weeksPerYear } = assumptions;
-  const casual = read.rows.find((r) => num(r["FTE"]) === 0)!;
-  const partTime = read.rows.find((r) => num(r["FTE"]) === 0.8)!;
+  // --- 3. an hourly rate is not a cost, and Atlas will not invent the hours
+  // A rate per hour becomes an annual figure only by multiplying it by a
+  // number of hours no payroll export in this shape carries. Atlas used to
+  // supply that number from a config file, which meant every frontline cost
+  // on the screen was Atlas's arithmetic wearing the client's data. Now it
+  // refuses, says so, and asks — and once the client answers, it prices them.
+  const hourly = read.rows.filter((r) => r["RateUnit"] === "Hourly");
+  assert(hourly.length === 15, `the fixture must be entirely hourly: got ${hourly.length}`);
   assert(
-    num(casual["Fully Loaded Cost"]) === Math.round(34.42 * casualHoursPerWeek * weeksPerYear),
-    `a casual must be priced on the stated casual hours: got ${casual["Fully Loaded Cost"]}`
+    hourly.every((r) => num(r["Fully Loaded Cost"]) === 0),
+    "an hourly rate must not be turned into a cost while the hours behind it are unknown"
+  );
+
+  const asked = (read.notes ?? []).find((n) => n.id === "paid-hours")!;
+  assert(asked && asked.kind === "question", "leaving 15 people uncosted must be raised as a question, not left silent");
+  assert(asked.answerKind === "hours", "the question must be answerable, or it is just a complaint");
+  assert(
+    asked.evidence.includes("$34.42"),
+    `the question must carry the evidence the client needs to answer it: ${asked.evidence}`
+  );
+
+  // ...and the client's answer prices them, at the figure they gave.
+  const answered = await readSourceFile("KH_Employee Data.xlsx", frontline, {
+    ...EMPTY_ANSWERS,
+    hoursPerWeek: 38,
+  });
+  const partTime = answered.rows.find((r) => num(r["FTE"]) === 0.8)!;
+  assert(
+    num(partTime["Fully Loaded Cost"]) === Math.round(34.42 * 38 * 52),
+    `an answered rate must be annualised on the client's hours, held full-time: got ${partTime["Fully Loaded Cost"]}`
+  );
+  const restated = (answered.notes ?? []).find((n) => n.id === "paid-hours")!;
+  assert(
+    restated.kind === "assumption" && restated.answeredWith === "38 hours a week",
+    "an answered question must come back as an assumption that names the client as its source"
   );
   assert(
-    num(partTime["Fully Loaded Cost"]) === Math.round(34.42 * fullTimeHoursPerWeek * weeksPerYear),
-    `a part-timer must carry the full-time rate, since Atlas prices cost × FTE: got ${partTime["Fully Loaded Cost"]}`
+    answered.conversion.detail.includes("38 hours a week you supplied"),
+    `the figure must be stated wherever the cost is: ${answered.conversion.detail}`
   );
-  assert(
-    read.conversion.detail.includes(String(casualHoursPerWeek)),
-    "the hours assumption must be stated wherever the cost is"
-  );
-  console.log(
-    `3. Hourly rates annualised at ${fullTimeHoursPerWeek}h (${casualHoursPerWeek}h casual) × ${weeksPerYear}w, and says so.`
-  );
+  console.log(`3. Hourly rates: 15 left at $0 and asked about; answered at 38h they price at $${num(partTime["Fully Loaded Cost"]).toLocaleString()}.`);
 
   // --- 4. a title band above the headers is skipped ----------------------
   const payroll = await readSourceFile("Payroll Listing.xlsx", workbook([{ name: "Group_Payroll", grid: PAYROLL_GRID }]));
@@ -313,9 +337,53 @@ async function main() {
   const built = await buildOrgGraph(bound, { orgId: "verify-messy", anonymize: false });
   const metrics = computeMetrics(built.positions, built.positions.find((p) => p.managerId === null)?.id ?? null);
   assert(metrics.headcount === 29, `expected 29 positions, got ${metrics.headcount}`);
-  assert(metrics.totalCost > 2_000_000, `costs from both files must reach the metrics: got ${metrics.totalCost}`);
+  // Everyone is counted; only the salaried are priced. That gap is the point
+  // of the exercise, so it is asserted rather than tolerated — and it has to
+  // be raised where the client will see it.
+  assert(
+    Math.round(metrics.totalCost) === Math.round(stated),
+    `only the priced population may reach the total: file says ${stated}, metrics say ${metrics.totalCost}`
+  );
+  const coverage = costCoverage(built.positions)!;
+  assert(coverage && coverage.kind === "question", "an establishment 15/29 uncosted must say so before the map");
+  assert(
+    coverage.statement.includes("15 of 29"),
+    `the gap must be stated in people, not percentages alone: ${coverage.statement}`
+  );
   console.log(
-    `6. Bound: ${metrics.headcount} positions · $${Math.round(metrics.totalCost).toLocaleString()} across a head-office listing and a four-brand workbook.`
+    `6. Bound: ${metrics.headcount} positions · $${Math.round(metrics.totalCost).toLocaleString()} — the 15 hourly staff counted, not priced, and asked about.`
+  );
+
+  // --- 7. one dimension, two column names, one set of groups -------------
+  // The head-office listing calls the brand "Source Brand"; the workbook
+  // calls it "BRAND". Consolidating on either alone leaves the other file's
+  // people ungrouped, which is the difference between one organisation on
+  // the map and two.
+  const consolidated = bindFiles(sources, {
+    files: [],
+    groupBy: { columns: ["Source Brand", "BRAND"], label: "Brand", topLabel: "Kinyara Group" },
+    rowFilter: null,
+    notes: "",
+    warnings: [],
+    source: "ai",
+    model: null,
+  });
+
+  assert(consolidated.groupBy?.column === "Brand", "the two columns must coalesce into one named after the dimension");
+  const grouped = consolidated.rows.filter((r) => (r["Brand"] ?? "").trim() !== "").length;
+  assert(grouped === 29, `every row from both files must carry the dimension: got ${grouped} of 29`);
+
+  // And the fact that the two files disagree about the vocabulary has to be
+  // visible in the data, or nothing downstream can ask the client about it.
+  const fromPayroll = consolidated.groupValues.filter((v) => v.files.includes("Payroll Listing.xlsx"));
+  const fromWorkbook = consolidated.groupValues.filter((v) => v.files.includes("KH_Employee Data.xlsx"));
+  assert(
+    fromPayroll.some((v) => !fromWorkbook.some((w) => w.value === v.value)),
+    "a value in one file's vocabulary and not the other's must be visible as such"
+  );
+  console.log(
+    `7. Consolidation: "Source Brand" + "BRAND" → one "Brand" column, ${consolidated.groupValues.length} values ` +
+      `(${fromPayroll.length} from payroll, ${fromWorkbook.length} from the workbook) with which file each came from.`
   );
 
   console.log("\nALL MESSY-SOURCE CHECKS PASSED");

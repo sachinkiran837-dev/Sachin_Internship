@@ -14,7 +14,16 @@
  */
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { auditLog, ingestIssues, orgs, positions, scenarios } from "../db/schema";
+import {
+  auditLog,
+  ingestIssues,
+  ingestNotes,
+  orgs,
+  positions,
+  scenarios,
+  sourceBlobs,
+  sourceFiles,
+} from "../db/schema";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -57,6 +66,9 @@ async function main() {
   }
   await db.delete(scenarios).where(inArray(scenarios.orgId, orgIds));
   await db.delete(ingestIssues).where(inArray(ingestIssues.orgId, orgIds));
+  await db.delete(ingestNotes).where(inArray(ingestNotes.orgId, orgIds));
+  await db.delete(sourceFiles).where(inArray(sourceFiles.orgId, orgIds));
+  await db.delete(sourceBlobs).where(inArray(sourceBlobs.orgId, orgIds));
   await db.delete(positions).where(inArray(positions.orgId, orgIds));
 
   for (const id of orgIds) {

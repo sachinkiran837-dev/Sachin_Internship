@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Build Machine · Tract In Development Process</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%2307111F'/%3E%3Crect x='8' y='26' width='5' height='6' fill='%23F25B6E'/%3E%3Crect x='16' y='20' width='5' height='12' fill='%23ffffff'/%3E%3Crect x='24' y='14' width='5' height='18' fill='%23ffffff'/%3E%3C/svg%3E" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+:root{
+  --ink:#07111F; --grey-dark:#46546B; --grey-mid:#64718A; --grey-light:#98A2B3;
+  --grey-bg:#F4F5F7; --paper:#FBFBFC; --surface:#FFFFFF;
+  --blue:#CE3650; --blue-royal:#AE2A40; --blue-bright:#F6818F; --blue-tint:#FDE3E6;
+  --accent-bright:#F25B6E;
+  --green:#1B7A3E; --amber:#9A6614; --red:#B3261E;
+  --serif:'Schibsted Grotesk',ui-sans-serif,system-ui,sans-serif;
+  --line:#E4E7EC;
+  --elev-1:0 0 0 1px rgba(7,17,31,.04), 0 1px 2px rgba(7,17,31,.05), 0 4px 12px rgba(7,17,31,.05);
+  --elev-2:0 0 0 1px rgba(7,17,31,.05), 0 2px 4px rgba(7,17,31,.06), 0 10px 28px rgba(7,17,31,.09);
+}
+*{box-sizing:border-box;}
+html,body{margin:0; padding:0;}
+body{font-family:'Schibsted Grotesk', system-ui, -apple-system, sans-serif; color:var(--ink); background:var(--paper);
+  -webkit-font-smoothing:antialiased; line-height:1.5;}
+.wrap{max-width:1180px; margin:0 auto; padding:0 32px 72px;}
+
+/* ---- masthead ---- */
+.masthead{display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  padding:22px 0 20px; border-bottom:1px solid var(--line); margin-bottom:38px;}
+.brand{display:flex; align-items:center; gap:13px;}
+.brand .mark{width:38px; height:38px; border-radius:9px; background:var(--ink); display:flex; align-items:flex-end;
+  justify-content:center; gap:2.5px; padding:9px 8px;}
+.brand .mark i{width:4px; border-radius:1px; display:block; background:#fff;}
+.brand .mark i:nth-child(1){height:7px; background:var(--accent-bright);}
+.brand .mark i:nth-child(2){height:13px;}
+.brand .mark i:nth-child(3){height:19px;}
+.brand .txt b{display:block; font-size:16px; font-weight:700; letter-spacing:-.01em;}
+.brand .txt span{display:block; font-size:11.5px; color:var(--grey-mid); margin-top:1px;}
+.mtag{font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--grey-mid);
+  border:1px solid var(--line); border-radius:999px; padding:6px 13px; background:var(--surface);}
+
+/* ---- section head ---- */
+.eyebrow{font-size:10.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--blue);}
+.eyebrow .dot{color:var(--blue); margin-right:5px;}
+.sectionhead{margin-bottom:22px;}
+.sectionhead h1{font-family:var(--serif); font-weight:600; font-size:33px; letter-spacing:-.02em; margin:9px 0 11px;}
+.sectionhead .lede{font-size:14.5px; color:var(--grey-dark); max-width:720px; line-height:1.62;}
+
+/* ---- panel ---- */
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; box-shadow:var(--elev-1);}
+.cardhead{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px;}
+.cardhead h3{font-size:14.5px; margin:0;}
+
+/* ===== Engine room ===== */
+.machine{display:flex; align-items:stretch; gap:0;}
+.mzone{display:flex; flex-direction:column; justify-content:center; gap:9px; flex-shrink:0; width:184px;}
+.mzone .zh{font-size:9.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--grey-mid); margin-bottom:1px;}
+.mchip{border:1px solid var(--line); border-radius:9px; padding:10px 12px; background:var(--surface); box-shadow:var(--elev-1);
+  opacity:.32; transform:translateY(6px); transition:opacity .5s ease, transform .5s ease;}
+.mchip.lit{opacity:1; transform:none;}
+.mchip.star{border-color:var(--blue-bright); box-shadow:0 0 0 1px var(--blue-bright), var(--elev-1); background:linear-gradient(180deg,#fff, #FFF7F8);}
+.mchip .ct{font-weight:700; font-size:12.5px; display:flex; align-items:center; justify-content:space-between; gap:6px; line-height:1.25;}
+.mchip .sp{font-size:10px; color:var(--grey-mid); line-height:1.42; margin-top:5px;}
+.etag,.tg{font-size:8px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 6px; border-radius:4px; white-space:nowrap; display:inline-block;}
+.t-auto{background:var(--blue-tint); color:var(--blue-royal); border:1px solid var(--blue-bright);}
+.t-hybrid{background:#fff; color:var(--blue-royal); border:1px solid var(--blue-bright);}
+.t-human{background:var(--ink); color:#fff;}
+.t-req{background:var(--blue-tint); color:var(--blue-royal);}
+.t-rec{background:var(--grey-bg); color:var(--grey-dark);}
+.t-opt{background:var(--grey-bg); color:var(--grey-mid);}
+.t-star{background:var(--accent-bright); color:#fff;}
+.mconnect{display:flex; align-items:center; justify-content:center; width:34px; flex-shrink:0; color:var(--grey-light); transition:color .5s ease;}
+.mconnect.lit{color:var(--blue);}
+.mconnect svg{width:18px; height:18px;}
+.mflow{flex:1; display:flex; flex-direction:column; min-width:0;}
+.mflow .fh{display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; gap:10px; flex-wrap:wrap;}
+.mflow .fh .ft{font-size:9.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--grey-mid);}
+.legend{display:flex; gap:13px; flex-wrap:wrap;}
+.legend span{display:flex; align-items:center; gap:5px; font-size:9.5px; color:var(--grey-mid);}
+.legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+.engines{flex:1; display:flex; gap:8px; min-width:0; align-items:stretch;}
+.engine{flex:1 1 0; min-width:0; border:1px solid var(--line); border-radius:10px; padding:11px 11px 10px; background:var(--surface);
+  box-shadow:var(--elev-1); display:flex; flex-direction:column; cursor:pointer; text-align:left; font:inherit; color:inherit;
+  opacity:.28; transform:translateY(8px); transition:opacity .5s ease, transform .5s ease, box-shadow .15s ease, border-color .15s ease;}
+.engine.lit{opacity:1; transform:none;}
+.engine:hover{box-shadow:var(--elev-2); border-color:var(--grey-light);}
+.engine.sel{border-color:var(--blue); box-shadow:0 0 0 1px var(--blue), var(--elev-2);}
+.engine .en{display:flex; align-items:center; gap:7px; margin-bottom:7px;}
+.engine .en .num{width:18px; height:18px; border-radius:5px; background:var(--ink); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.engine .en .nm{font-family:var(--serif); font-weight:600; font-size:13.5px;}
+.engine .etag{align-self:flex-start; margin-bottom:8px;}
+.engine .lens{display:flex; align-items:flex-start; gap:6px; font-size:10px; color:var(--grey-dark); line-height:1.35; padding:2px 0;}
+.engine .lens i{width:3px; height:3px; border-radius:50%; background:var(--blue); margin-top:6px; flex-shrink:0; display:block;}
+.engine .feeds{margin-top:auto; padding-top:9px; font-size:8.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--grey-mid);}
+.engine.sel .feeds, .engine:hover .feeds{color:var(--blue-royal);}
+.replay{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--surface); border-radius:7px; padding:6px 12px; font-size:11.5px; font-weight:600; color:var(--grey-dark); cursor:pointer; font-family:inherit;}
+.replay:hover{background:var(--grey-bg); color:var(--ink);}
+.einspect{border:1px solid var(--line); border-left:3px solid var(--blue); border-radius:10px; background:var(--surface); padding:15px 18px; margin-top:14px; box-shadow:var(--elev-1); animation:answerIn .4s cubic-bezier(.16,1,.3,1) both;}
+.einspect h5{font-family:var(--serif); font-size:15.5px; font-weight:600; margin:0 0 5px; display:flex; align-items:center; gap:9px;}
+.einspect h5 .num{width:20px; height:20px; border-radius:5px; background:var(--ink); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+.einspect .meta{font-size:11px; color:var(--grey-mid); margin-bottom:9px;}
+.einspect p{font-size:13px; color:var(--grey-dark); line-height:1.6; max-width:78ch; margin:0;}
+.faint{font-size:10.5px; color:var(--grey-light); margin-top:12px; line-height:1.6;}
+@keyframes answerIn{0%{opacity:0; transform:translateY(6px);}100%{opacity:1; transform:none;}}
+
+/* ---- notes below ---- */
+.notes{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;}
+.note{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px 22px; box-shadow:var(--elev-1);}
+.note.accent{border-left:3px solid var(--blue);}
+.note h4{font-family:var(--serif); font-size:14.5px; font-weight:600; margin:0 0 9px;}
+.note p{font-size:12.5px; color:var(--grey-dark); line-height:1.62; margin:0 0 9px;}
+.note p:last-child{margin-bottom:0;}
+.note b{color:var(--ink);}
+.footer{margin-top:34px; padding-top:18px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--grey-light);}
+
+@media (max-width:1080px){ .engines{flex-wrap:wrap;} .engine{flex:1 1 30%; min-width:158px;} .notes{grid-template-columns:1fr;} }
+@media (max-width:860px){
+  .wrap{padding:0 18px 56px;} .sectionhead h1{font-size:26px;}
+  .machine{flex-direction:column; gap:6px;} .mzone{width:auto;} .engine{flex:1 1 44%;}
+  .mconnect{width:auto; height:24px; transform:rotate(90deg);} }
+@media (prefers-reduced-motion: reduce){ .mchip,.engine{opacity:1 !important; transform:none !important;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="brand">
+      <div class="mark"><i></i><i></i><i></i></div>
+      <div class="txt"><b>Tract In</b><span>Development Process</span></div>
+    </div>
+    <div class="mtag">The build machine · v1</div>
+  </div>
+
+  <div class="sectionhead">
+    <div class="eyebrow"><span class="dot">&#9679;</span>How this works</div>
+    <h1>What actually happens to your idea</h1>
+    <p class="lede">No black box. Here is the machine that turns an idea into a working POC: what goes in, the engines it runs through, what comes out. Each engine is labelled by how much is done by a machine and how much is a Project Partner's judgement. Notice there is no fully automatic engine. A person is in every one.</p>
+  </div>
+
+  <div class="panel">
+    <div class="cardhead">
+      <h3>The engine room</h3>
+      <button class="replay" id="replay">&#8635; Replay</button>
+    </div>
+    <div class="machine">
+      <div class="mzone inputs" id="inputs">
+        <div class="zh">Inputs</div>
+      </div>
+      <div class="mconnect" id="c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="mflow">
+        <div class="fh">
+          <span class="ft">Engine room &middot; 6 engines</span>
+          <div class="legend">
+            <span><i style="background:var(--blue-tint); border:1px solid var(--blue-bright)"></i>Auto + human</span>
+            <span><i style="background:#fff; border:1px solid var(--blue-bright)"></i>AI + human</span>
+            <span><i style="background:var(--ink)"></i>Human / red-team</span>
+          </div>
+        </div>
+        <div class="engines" id="engines"></div>
+      </div>
+      <div class="mconnect" id="c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="mzone outputs" id="outputs">
+        <div class="zh">Outputs</div>
+      </div>
+    </div>
+    <div id="inspect"></div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h4>The method, in plain terms</h4>
+      <p>The machine does the mechanical work fast: it scaffolds a branded, running app from a single-file demo, wires the plumbing, and pins the numbers the client has already seen. That is the part a machine genuinely does better.</p>
+      <p>The judgement stays human. <b>Whether to build at all, what the tool must think, whether the output can face a client, and what gets carried into the next build</b> are set by people who have done this before. The engines in ink are where a Project Partner earns their keep.</p>
+    </div>
+    <div class="note accent">
+      <h4>The one thing to remember</h4>
+      <p>The measure of the whole machine is the last engine: <b>run N+1 is cheaper than run N</b>. Every build routes its friction back into the starter, the skills and the library, and leaves exactly one reusable asset behind.</p>
+      <p>An idea that skips the front of the line, scoped as a demo by default and later wanted as more, forfeits a week of plumbing to recover. That is why the first engine is a person asking one question out loud.</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Tract In &middot; Development Process &middot; the build machine</span>
+    <span>Reference implementation of the inputs / engine room / outputs pattern &middot; state as of 13 July 2026</span>
+  </div>
+
+</div>
+
+<script>
+const INPUTS = [
+  { name:"Idea + client context", tag:"Required", cls:"t-req", spec:"The problem worth solving, the client, and the yes we are chasing. Everything downstream serves this." },
+  { name:"Seed demo", tag:"Recommended", cls:"t-rec", spec:"A single-file HTML demo that wins the room and doubles as the build spec. Its data, brand and forms all get lifted." },
+  { name:"Content library", tag:"Recommended", cls:"t-rec", spec:"The playbooks, guardrails and definitions the tool's thinking draws on. Grounding, not guesswork." },
+  { name:"Firm primitives", tag:"Standing", cls:"t-opt", spec:"Accounts, org, verified send domain, secrets vault. Set up once, never a per-build step." },
+];
+const OUTPUTS = [
+  { name:"Running POC", note:"Branded, hosted at client.tractin.com, pinned to Sydney, gated to the client." },
+  { name:"Handover pack", note:"Stub ledger, state-as-of, teardown note, PROVISIONING.md. Nothing faked goes unlabelled." },
+  { name:"A cheaper next build", star:true, note:"Stall fixes applied, one library asset richer, the productise trigger one count closer." },
+];
+const ENGINES = [
+  { n:1, key:"scope", name:"Scope", tag:"Human", cls:"t-human",
+    lenses:["Demo, POC candidate, or product bet?","Which of the six archetypes?","Recorded at birth, in the README"],
+    feeds:"Feeds &rarr; the build's rails", feedsPlain:"the build's rails",
+    basis:"One question, asked out loud, before anything is generated.",
+    detail:"The cheapest gate and the one most often skipped. A build scoped as a demo by default, later wanted as more, forfeits a week of plumbing to recover. Naming the shape here decides the starter, the hosting and the whole cost curve, so a person makes the call and writes it down." },
+  { n:2, key:"blueprint", name:"Blueprint", tag:"AI + human", cls:"t-hybrid",
+    lenses:["Behaviours &rarr; mechanisms","Recover the arithmetic from the seed","Map the content each draws on","Name the signature interaction","Human sign-off before code"],
+    feeds:"Feeds &rarr; what gets built", feedsPlain:"what actually gets built",
+    basis:"AI decomposes; a Project Partner signs off before a line of code.",
+    detail:"The blueprint is the cheapest medium in which to be wrong. Every behaviour is assigned a mechanism (a deterministic tool, an LLM call, retrieval, or a human), every headline figure is re-derived from named assumptions so the discrepancies become test fixtures, and the one moment the tool exists for is named on paper before it is built." },
+  { n:3, key:"scaffold", name:"Scaffold", tag:"Auto + human", cls:"t-auto",
+    lenses:["/spinup reads the seed","Confirm only the gaps","Brand as data, domain model generated","Boots, or it is not handed over"],
+    feeds:"Feeds &rarr; a running skeleton", feedsPlain:"a running skeleton",
+    basis:"Machine-led scaffolding, with one human confirm gate.",
+    detail:"This is where the machine does the most. /spinup reads the demo, confirms only the gaps, scaffolds a branded app by deletion, and generates the domain model behind a single human confirm gate. A spin-up that does not install, typecheck, build and boot is not handed over." },
+  { n:4, key:"build", name:"Build", tag:"AI + human", cls:"t-hybrid",
+    lenses:["Test-first at every seam","Deterministic behaviours first","AI behaviours grounded in the library","The generic stub is replaced, not adapted"],
+    feeds:"Feeds &rarr; the working tool", feedsPlain:"the working tool",
+    basis:"Test-first at the blueprint's seams; deterministic before AI.",
+    detail:"Deterministic behaviours are fast and built first, because they lock the figures the client has already seen. AI behaviours are per-tool work: the schema contract, prompt, guards and extraction plumbing are written fresh and grounded in the content library, never hand-waved, and the starter's generic AI stub is replaced rather than adapted." },
+  { n:5, key:"prove", name:"Prove", tag:"Red-team", cls:"t-human",
+    lenses:["Lands-with-a-real-user checklist","The signature interaction works","AI output certified against the client's own signed truth","No live model in the room until it reproduces"],
+    feeds:"Feeds &rarr; a POC that can face a client", feedsPlain:"a POC that can face a client",
+    basis:"It lands with a real user, or it does not ship.",
+    detail:"Two things decide whether the tool lands and the scaffold covers neither: the first-run experience (a magic link printing to a server console reads as broken) and the signature interaction. Any model output facing a client is certified first, against a gold set from the client's own determinations. Until it reproduces, the honest fallback is precomputed, human-verified answers with the model off." },
+  { n:6, key:"harvest", name:"Ship &amp; harvest", tag:"Auto + human", cls:"t-auto",
+    lenses:["Provision in three tiers","Deploy to client.tractin.com, Sydney-pinned","Hand over stub ledger + state-as-of","Route the stall list, leave one asset behind"],
+    feeds:"Feeds &rarr; the next build, cheaper", feedsPlain:"the next build, cheaper",
+    basis:"Provision, deploy, hand over, then feed the machine back.",
+    detail:"The billed, secret-bearing steps are never auto-run; they are a human checklist with a smoke test each. Once live, every build routes its friction back into the starter, the skills and the library, and leaves exactly one reusable asset behind. An unapplied stall list is the loop broken at its last link." },
+];
+
+const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (id) => document.getElementById(id);
+let sel = null;
+let timers = [];
+
+// build inputs
+INPUTS.forEach(x => {
+  const el = document.createElement("div");
+  el.className = "mchip in-chip";
+  el.innerHTML = '<div class="ct">'+x.name+'<span class="tg '+x.cls+'">'+x.tag+'</span></div><div class="sp">'+x.spec+'</div>';
+  $("inputs").appendChild(el);
+});
+// build engines
+ENGINES.forEach((e,i) => {
+  const b = document.createElement("button");
+  b.className = "engine";
+  b.dataset.key = e.key;
+  b.innerHTML = '<div class="en"><div class="num">'+e.n+'</div><div class="nm">'+e.name+'</div></div>'
+    + '<span class="etag '+e.cls+'">'+e.tag+'</span>'
+    + e.lenses.map(l => '<div class="lens"><i></i>'+l+'</div>').join('')
+    + '<div class="feeds">'+e.feeds+'</div>';
+  b.addEventListener("click", () => { setSel(sel === e.key ? null : e.key); });
+  $("engines").appendChild(b);
+});
+// build outputs
+OUTPUTS.forEach(x => {
+  const el = document.createElement("div");
+  el.className = "mchip out-chip" + (x.star ? " star" : "");
+  el.innerHTML = '<div class="ct">'+x.name+(x.star ? '<span class="tg t-star">Compounds</span>' : '')+'</div><div class="sp">'+x.note+'</div>';
+  $("outputs").appendChild(el);
+});
+
+function renderInspect(){
+  const box = $("inspect");
+  const e = ENGINES.find(x => x.key === sel);
+  if (e){
+    box.innerHTML = '<div class="einspect"><h5><span class="num">'+e.n+'</span>'+e.name+' engine'
+      + '<span class="etag '+e.cls+'">'+e.tag+'</span></h5>'
+      + '<div class="meta">'+e.basis+' &middot; feeds '+e.feedsPlain+'</div>'
+      + '<p>'+e.detail+'</p></div>';
+  } else {
+    box.innerHTML = '<div class="faint">Click any engine to inspect what it does, and how much of it is a machine versus a Project Partner. The frameworks are standard; the judgement is where the work is.</div>';
+  }
+}
+function setSel(k){
+  sel = k;
+  document.querySelectorAll(".engine").forEach(el => el.classList.toggle("sel", el.dataset.key === k));
+  renderInspect();
+}
+
+function lightUp(step){
+  document.querySelectorAll(".in-chip").forEach(el => el.classList.toggle("lit", step >= 1));
+  $("c1").classList.toggle("lit", step >= 2);
+  document.querySelectorAll(".engine").forEach((el,i) => el.classList.toggle("lit", step >= i + 2));
+  $("c2").classList.toggle("lit", step >= 8);
+  document.querySelectorAll(".out-chip").forEach(el => el.classList.toggle("lit", step >= 8));
+}
+function run(){
+  timers.forEach(clearTimeout); timers = [];
+  if (reduce){ lightUp(8); return; }
+  lightUp(0);
+  [1,2,3,4,5,6,7,8].forEach((s,i) => timers.push(setTimeout(() => lightUp(s), 260 + i*280)));
+}
+
+$("replay").addEventListener("click", () => { setSel(null); run(); });
+renderInspect();
+run();
+</script>
+</body>
+</html>

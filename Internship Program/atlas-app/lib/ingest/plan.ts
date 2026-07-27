@@ -50,7 +50,14 @@ export interface FilePlan {
  * separate hierarchies read as one organisation instead of a pile of roots.
  */
 export interface GroupPlan {
-  column: string;
+  /**
+   * Every source column carrying the dimension, across every file. Two
+   * exports from two systems almost never agree on what to call it — one
+   * says "BRAND", the other "Source Brand" — and consolidating on one of
+   * them alone would leave the other file's people ungrouped. The binder
+   * coalesces all of them into a single column named after `label`.
+   */
+  columns: string[];
   /** Singular noun for the dimension: "Brand", "Entity", "Region". */
   label: string;
   /** Name for the single node all the groups sit under. */
@@ -101,7 +108,7 @@ Return ONLY a JSON object. No prose before or after it, no markdown code fences.
       "reason": "<one sentence, addressed to the client, saying why>",
       "columns": { "<source column exactly as given>": "<canonical field>" } }
   ],
-  "groupBy": { "column": "<source column>", "label": "<singular noun>", "topLabel": "<name for the combined top node>" } | null,
+  "groupBy": { "columns": ["<source column>", "…one per file that carries this dimension"], "label": "<singular noun>", "topLabel": "<name for the combined top node>" } | null,
   "rowFilter": { "column": "<source column>", "include": ["<value>"], "exclude": ["<value>"] } | null,
   "notes": "<2-4 sentences to the client: what you concluded and what you did about it>"
 }
@@ -118,7 +125,7 @@ Rules, in order of importance:
 1. Only override a column in "columns" when the automatic reading would be wrong or is clearly missing something. It already matches obvious names. Never map two source columns in one file to the same canonical field.
 2. Follow the instruction. If it says the structure comes from a chart and the numbers from a spreadsheet, say so through "use", even when the spreadsheet also looks like a position list.
 3. A chart or a diagram is "structure" whenever there is also a fuller staff list to lay it over. It is "positions" only when it is the only thing describing who exists.
-4. Set "groupBy" only when the instruction asks for consolidation by some dimension AND a column carrying that dimension actually exists. Name the exact column.
+4. Set "groupBy" only when the instruction asks for consolidation by some dimension AND a column carrying that dimension actually exists. List the exact column from EVERY file that carries it — two systems rarely name it the same way, and a file whose column you leave out will not be grouped at all. Do not list a column that merely correlates with the dimension.
 5. Set "rowFilter" only when the instruction restricts which rows are in scope. Leave "include" or "exclude" empty when unused.
 6. Never invent a filename, a column name or a value. Copy them exactly as given to you. If the instruction asks for something the files cannot support, say so in "notes" and leave the corresponding part of the plan null.`;
 
@@ -334,21 +341,47 @@ function validateColumns(
 function validateGroupBy(raw: unknown, files: PlanInput[], warnings: string[]): GroupPlan | null {
   if (!isRecord(raw)) return null;
 
-  const requested = String(raw.column ?? "").trim();
-  if (!requested) return null;
+  // A single "column" is accepted as well as a list, so a plan that names one
+  // column for a one-file upload still works exactly as it reads.
+  const requested = [
+    ...asArray(raw.columns).map(String),
+    ...(typeof raw.column === "string" ? [raw.column] : []),
+  ]
+    .map((c) => c.trim())
+    .filter(Boolean);
 
-  const actual = findColumnAcross(requested, files);
-  if (!actual) {
-    warnings.push(
-      `Atlas was asked to consolidate on a column called "${requested}", which is not in any of these files, ` +
-        `so the establishment was left ungrouped. Add that column to the export, or name one that is there.`
-    );
-    return null;
+  if (requested.length === 0) return null;
+
+  const columns: string[] = [];
+  const missing: string[] = [];
+  for (const want of requested) {
+    const actual = findColumnAcross(want, files);
+    if (!actual) {
+      missing.push(want);
+      continue;
+    }
+    if (!columns.includes(actual)) columns.push(actual);
   }
 
+  // One warning for the whole decision, not one per name: a plan that named
+  // three columns and found none of them has made a single mistake, and
+  // reporting it three times buries the five other things on the screen.
+  if (missing.length > 0) {
+    const named = missing.map((m) => `"${m}"`).join(", ");
+    warnings.push(
+      columns.length === 0
+        ? `Atlas was asked to consolidate on ${named}, which ${missing.length === 1 ? "is" : "are"} not in any of these files, ` +
+            `so the establishment was left ungrouped. Add that column to the export, or name one that is there.`
+        : `Atlas was asked to consolidate on ${named} as well, which ${missing.length === 1 ? "is" : "are"} not in any of these files. ` +
+            `Anyone whose only record of it was in ${missing.length === 1 ? "that column" : "those columns"} is ungrouped.`
+    );
+  }
+
+  if (columns.length === 0) return null;
+
   return {
-    column: actual,
-    label: String(raw.label ?? "").trim() || actual,
+    columns,
+    label: String(raw.label ?? "").trim() || columns[0],
     topLabel: String(raw.topLabel ?? "").trim() || "Consolidated organisation",
   };
 }

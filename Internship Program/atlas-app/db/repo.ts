@@ -1,10 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, lt } from "drizzle-orm";
 import { db } from "./client";
-import { auditLog, ingestIssues, orgs, positions, scenarios, sourceFiles, uploadChunks } from "./schema";
+import {
+  auditLog,
+  ingestIssues,
+  ingestNotes,
+  orgs,
+  positions,
+  scenarios,
+  sourceBlobs,
+  sourceFiles,
+  uploadChunks,
+} from "./schema";
 import type { IngestIssue, Position, Move, AuditEntry } from "@/lib/graph/types";
 import type { FileBinding } from "@/lib/ingest/bindFiles";
 import type { IngestPlan } from "@/lib/ingest/plan";
+import type { IngestNote } from "@/lib/ingest/notes";
+import { parseAnswers, type IngestAnswers } from "@/lib/ingest/answers";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -150,6 +162,131 @@ export async function getSourceFiles(orgId: string): Promise<FileBinding[]> {
       needsReview: r.needsReview,
       planReason: r.planReason,
     }));
+}
+
+export async function saveNotes(orgId: string, notes: IngestNote[]): Promise<void> {
+  if (notes.length === 0) return;
+
+  await db.insert(ingestNotes).values(
+    notes.map((n, i) => ({
+      id: randomUUID(),
+      orgId,
+      noteKey: n.id,
+      kind: n.kind,
+      topic: n.topic,
+      statement: n.statement,
+      evidence: n.evidence,
+      effect: n.effect,
+      answerKind: n.answerKind,
+      optionsJson: JSON.stringify(n.options),
+      answeredWith: n.answeredWith ?? null,
+      orderIndex: i,
+    }))
+  );
+}
+
+export async function getNotes(orgId: string): Promise<IngestNote[]> {
+  const rows = await db.select().from(ingestNotes).where(eq(ingestNotes.orgId, orgId));
+
+  return rows
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((r) => ({
+      id: r.noteKey,
+      kind: r.kind as IngestNote["kind"],
+      topic: r.topic,
+      statement: r.statement,
+      evidence: r.evidence,
+      effect: r.effect,
+      answerKind: r.answerKind as IngestNote["answerKind"],
+      options: JSON.parse(r.optionsJson) as IngestNote["options"],
+      answeredWith: r.answeredWith ?? undefined,
+    }));
+}
+
+/** The bytes an establishment was built from, kept so it can be read again. */
+export async function saveSourceBlobs(
+  orgId: string,
+  files: { filename: string; buffer: Buffer }[]
+): Promise<void> {
+  if (files.length === 0) return;
+
+  for (const batch of chunk(
+    files.map((f, i) => ({
+      id: randomUUID(),
+      orgId,
+      filename: f.filename,
+      data: f.buffer.toString("base64"),
+      orderIndex: i,
+    })),
+    // One at a time: a base64 spreadsheet is large enough that batching
+    // several into one statement can exceed what the driver will send.
+    1
+  )) {
+    await db.insert(sourceBlobs).values(batch);
+  }
+}
+
+export async function getSourceBlobs(
+  orgId: string
+): Promise<{ filename: string; buffer: Buffer }[]> {
+  const rows = await db.select().from(sourceBlobs).where(eq(sourceBlobs.orgId, orgId));
+  return rows
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((r) => ({ filename: r.filename, buffer: Buffer.from(r.data, "base64") }));
+}
+
+/** Whether a re-read is possible at all, without pulling the bytes into memory. */
+export async function hasSourceBlobs(orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: sourceBlobs.id })
+    .from(sourceBlobs)
+    .where(eq(sourceBlobs.orgId, orgId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+export async function getAnswers(orgId: string): Promise<IngestAnswers> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  return parseAnswers(rows[0]?.answersJson ?? null);
+}
+
+/**
+ * Replaces everything derived from the files, leaving the establishment's
+ * identity and its stored bytes and answers alone. This is what a re-read
+ * needs: the org keeps its id — so a link to it still works — and everything
+ * that was a *reading* of the files is thrown away and built again, rather
+ * than patched to agree with the new answer.
+ */
+export async function clearDerived(orgId: string): Promise<void> {
+  await db.delete(positions).where(eq(positions.orgId, orgId));
+  await db.delete(ingestIssues).where(eq(ingestIssues.orgId, orgId));
+  await db.delete(ingestNotes).where(eq(ingestNotes.orgId, orgId));
+  await db.delete(sourceFiles).where(eq(sourceFiles.orgId, orgId));
+  // Scenarios hold a working copy of positions that no longer exist.
+  const owned = await db.select().from(scenarios).where(eq(scenarios.orgId, orgId));
+  if (owned.length > 0) {
+    await db.delete(auditLog).where(inArray(auditLog.scenarioId, owned.map((s) => s.id)));
+    await db.delete(scenarios).where(eq(scenarios.orgId, orgId));
+  }
+}
+
+/** Records the client's corrections and what the re-read was planned as. */
+export async function saveAnswers(
+  orgId: string,
+  answers: IngestAnswers,
+  plan: IngestPlan | null,
+  context: string
+): Promise<void> {
+  const current = await getOrg(orgId);
+  await db
+    .update(orgs)
+    .set({
+      answersJson: JSON.stringify(answers),
+      planJson: plan ? JSON.stringify(plan) : null,
+      ingestContext: context.trim() || null,
+      revision: (current?.revision ?? 0) + 1,
+    })
+    .where(eq(orgs.id, orgId));
 }
 
 /**
