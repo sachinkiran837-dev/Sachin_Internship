@@ -12,20 +12,6 @@ const initialState: IngestActionState = { error: null };
 
 const ACCEPT = SUPPORTED_FORMATS.map((f) => f.ext).join(",");
 
-const KIND_GROUPS = [
-  { kind: "table" as const, label: "Tables" },
-  { kind: "document" as const, label: "Documents" },
-  { kind: "visual" as const, label: "Charts & images" },
-];
-
-/** Starters for the context box — the four things messy client data usually needs said. */
-const CONTEXT_EXAMPLES = [
-  "Consolidate at brand level.",
-  "The structure is in the PDF; the spreadsheet is payroll only.",
-  "Exclude leavers.",
-  "Treat the Entity column as the organisation.",
-];
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -166,8 +152,7 @@ export function UploadForm() {
           <span className="text-sm">
             <span className="font-medium">Use the synthetic demo export</span>
             <span className="block text-muted-foreground">
-              Meridian Health Services — ~150 positions of fictional data, heavy on frontline
-              nursing/care and contractor roles, with realistic messiness.
+              Meridian Health Services — ~150 fictional positions.
             </span>
           </span>
         </label>
@@ -183,8 +168,7 @@ export function UploadForm() {
           <span className="text-sm">
             <span className="font-medium">Upload your own organisation data</span>
             <span className="block text-muted-foreground">
-              As many files as you have, in any format — spreadsheets, Word tables, even a
-              screenshot of an org chart. Atlas binds them into a single establishment.
+              As many files as you have, in any format. Atlas binds them into one establishment.
             </span>
           </span>
         </label>
@@ -215,8 +199,8 @@ export function UploadForm() {
                 : "Drop your files here, or click to browse"}
             </p>
             <p className="text-xs text-muted-foreground">
-              An establishment list, a payroll extract, a vacancy report, a chart from a board
-              pack. Atlas works out what each one is and binds them into a single organisation.
+              An establishment list, a payroll extract, an org chart — Atlas works out what each
+              one is.
             </p>
           </div>
 
@@ -316,46 +300,17 @@ export function UploadForm() {
               to each other. A column list cannot tell Atlas that three brands
               share one export, or that the chart is the source of truth for
               reporting lines and the spreadsheet only for money. */}
-          <div className="flex flex-col gap-2 rounded-md border p-3">
-            <Label htmlFor="context">Tell Atlas about these files (optional)</Label>
-            <p className="text-xs text-muted-foreground">
-              Anything that changes how they should be read — how many organisations are in
-              them, which file the structure comes from, which rows are out of scope, what an
-              oddly-named column actually means. Written as you would say it to a colleague.
-            </p>
-
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="context">Anything Atlas should know about these files?</Label>
             <textarea
               id="context"
               name="context"
               rows={3}
               value={context}
               onChange={(e) => setContext(e.target.value)}
-              placeholder="e.g. These cover our three trading brands — consolidate at brand level. The org structure is the PDF; the spreadsheet is payroll only. Ignore anyone whose leaving date has passed."
+              placeholder="Optional. e.g. Consolidate at brand level. The structure is in the PDF; the spreadsheet is payroll only. Exclude leavers."
               className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
-
-            <div className="flex flex-wrap gap-1.5">
-              {CONTEXT_EXAMPLES.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() =>
-                    setContext((current) => (current.trim() ? `${current.trim()} ${example}` : example))
-                  }
-                  className="rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-                >
-                  + {example}
-                </button>
-              ))}
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Read by Claude, which decides what each file is for and what its columns mean — it
-              is shown your filenames, column names and a few sample rows. It never touches the
-              rows themselves: the joining, the filtering and every number stay arithmetic. The
-              next screen shows exactly how your instructions were read, and names anything Atlas
-              could not do.
-            </p>
           </div>
 
           <input
@@ -369,29 +324,9 @@ export function UploadForm() {
             className="sr-only"
           />
 
-          <div className="flex flex-col gap-1.5">
-            {KIND_GROUPS.map(({ kind, label }) => (
-              <div key={kind} className="flex flex-wrap items-center gap-1.5">
-                <span className="w-32 shrink-0 text-xs text-muted-foreground">{label}</span>
-                {SUPPORTED_FORMATS.filter((f) => f.kind === kind).map((f) => (
-                  <span
-                    key={f.ext}
-                    className="rounded border bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
-                  >
-                    {f.ext}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-
           <p className="text-xs text-muted-foreground">
-            Spreadsheets, delimited text (delimiter auto-detected), JSON, XML, HTML and Word
-            tables are converted to the same shape deterministically. A PDF is read the same
-            way wherever it has a text layer — the characters and their positions are already
-            in the file. Only a scan, or a chart drawn as boxes and connectors, is transcribed
-            by a vision model, and those rows are flagged for review on the next screen: a
-            chart read from a picture is a starting point, not a baseline.
+            Spreadsheets, delimited text, JSON, XML, HTML, Word and PDF · images up to{" "}
+            {formatBytes(MAX_UPLOAD_BYTES)} a run.
           </p>
         </div>
       )}
