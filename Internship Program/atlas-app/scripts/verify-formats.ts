@@ -11,6 +11,7 @@
 import { deflateRawSync } from "node:zlib";
 
 import { formatFor, MAX_UPLOAD_BYTES, SUPPORTED_FORMATS } from "../lib/ingest/formats";
+import { mapColumns } from "../lib/ingest/columnMapper";
 import { readSourceFile } from "../lib/ingest/readSource";
 import { UnsupportedFileError } from "../lib/ingest/parseFile";
 import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
@@ -207,6 +208,38 @@ async function main() {
   console.log(
     `   → still built: ${metrics.headcount} positions · $${metrics.totalCost.toLocaleString()} · ${metrics.layers} layers`
   );
+
+  // --- 4b. a near-miss column never becomes a field it isn't -------------
+  // "Cost Centre" is a department synonym. When Department has already
+  // claimed that field, the old mapper handed Cost Centre to `cost` on a
+  // substring match, so every position carried a cost-centre code as its
+  // salary — and the real payroll figures then arrived, disagreed, and were
+  // discarded as conflicts. The cost column read 0 across the whole org.
+  const nearMiss = mapColumns([
+    "Position ID",
+    "Employee Name",
+    "Position Title",
+    "Department",
+    "Cost Centre",
+    "Manager ID",
+  ]);
+  const costCentre = nearMiss.find((m) => m.sourceColumn === "Cost Centre")!;
+  assert(
+    costCentre.targetField === null,
+    `"Cost Centre" must stay an extra column, not become ${costCentre.targetField}`
+  );
+  assert(
+    nearMiss.find((m) => m.sourceColumn === "Department")!.targetField === "department",
+    "the real department column must still map"
+  );
+
+  // ...and a genuine cost column in a second file still lands.
+  const payrollCols = mapColumns(["Staff ID", "Remuneration", "Employment Status"]);
+  assert(
+    payrollCols.find((m) => m.sourceColumn === "Remuneration")!.targetField === "cost",
+    "a real remuneration column must still map to cost"
+  );
+  console.log(`\n4b. "Cost Centre" stays an extra column; "Remuneration" still maps to cost.`);
 
   // --- 5. every advertised format routes somewhere ----------------------
   for (const f of SUPPORTED_FORMATS) {

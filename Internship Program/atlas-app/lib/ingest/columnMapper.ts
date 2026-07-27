@@ -67,37 +67,47 @@ function normalize(header: string): string {
 
 export function mapColumns(headers: string[]): ColumnMapping[] {
   const used = new Set<string>();
+
   return headers.map((sourceColumn) => {
-    const normalized = normalize(sourceColumn);
-    let bestField: keyof typeof SYNONYMS | null = null;
-    let bestScore = 0;
+    const { field, score } = bestMatch(normalize(sourceColumn));
 
-    for (const [field, synonyms] of Object.entries(SYNONYMS)) {
-      if (used.has(field)) continue;
-      for (const syn of synonyms) {
-        if (normalized === syn) {
-          bestField = field as keyof typeof SYNONYMS;
-          bestScore = 1;
-          break;
-        }
-        if (normalized.includes(syn) && syn.length > 2) {
-          const score = syn.length / normalized.length;
-          if (score > bestScore) {
-            bestField = field as keyof typeof SYNONYMS;
-            bestScore = score;
-          }
-        }
-      }
-      if (bestScore === 1) break;
-    }
-
-    if (bestField) used.add(bestField);
+    // A column maps to the field it most resembles, or to nothing. It is
+    // never handed to its *second* choice because the first was taken: an
+    // establishment with both "Department" and "Cost Centre" would otherwise
+    // see the latter lose department, fall through to the "cost" synonym,
+    // and quietly become everyone's salary — after which the real payroll
+    // figures arrive, disagree, and are discarded as conflicts. An unmapped
+    // extra column is recoverable; a poisoned cost field is not.
+    const claimed = field !== null && !used.has(field);
+    if (claimed) used.add(field);
 
     return {
       sourceColumn,
-      targetField: bestField,
-      confidence: bestField ? Math.max(bestScore, 0.6) : 0,
-      autoMapped: bestScore >= 0.95,
+      targetField: claimed ? field : null,
+      confidence: claimed ? Math.max(score, 0.6) : 0,
+      autoMapped: claimed && score >= 0.95,
     };
   });
+}
+
+/** The single best field for a header, ignoring what has already been taken. */
+function bestMatch(normalized: string): { field: keyof typeof SYNONYMS | null; score: number } {
+  let field: keyof typeof SYNONYMS | null = null;
+  let score = 0;
+
+  for (const [candidate, synonyms] of Object.entries(SYNONYMS)) {
+    for (const syn of synonyms) {
+      if (normalized === syn) return { field: candidate as keyof typeof SYNONYMS, score: 1 };
+
+      if (normalized.includes(syn) && syn.length > 2) {
+        const candidateScore = syn.length / normalized.length;
+        if (candidateScore > score) {
+          score = candidateScore;
+          field = candidate as keyof typeof SYNONYMS;
+        }
+      }
+    }
+  }
+
+  return { field, score };
 }
