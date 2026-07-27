@@ -9,7 +9,14 @@ import { SUPPORTED_FORMATS } from "@/lib/ingest/formats";
 import { readSourceFile } from "@/lib/ingest/readSource";
 import { bindFiles, type SourceFile } from "@/lib/ingest/bindFiles";
 import { buildOrgGraph } from "@/lib/ingest/buildGraph";
-import { createOrg, deleteUploads, loadUpload, saveIssues, savePositions } from "@/db/repo";
+import {
+  createOrg,
+  deleteUploads,
+  loadUpload,
+  saveIssues,
+  savePositions,
+  saveSourceFiles,
+} from "@/db/repo";
 
 export interface IngestActionState {
   error: string | null;
@@ -111,6 +118,11 @@ export async function ingestFileAction(
 
     const { positions, issues } = await buildOrgGraph(bound, { orgId, anonymize });
     await savePositions(positions);
+
+    // What each file turned out to contain, kept per file so the confirm
+    // screen can answer questions about a specific upload rather than only
+    // about the merged result.
+    await saveSourceFiles(orgId, bound.bindings);
 
     // What Atlas did to each file — the conversion and, when there is more
     // than one, how it was bound to the others — is recorded so the confirm

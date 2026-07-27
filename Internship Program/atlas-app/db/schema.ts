@@ -45,6 +45,37 @@ export const scenarios = pgTable("scenarios", {
 });
 
 /**
+ * What each uploaded file turned out to contain, and what Atlas did with it.
+ * Kept per file rather than collapsed into the combined establishment,
+ * because the question a client asks on the confirm screen is about *their*
+ * file — "where did our cost centre column go?", "did the payroll extract
+ * actually land?" — and that can't be answered from the merged result.
+ */
+export const sourceFiles = pgTable("source_files", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  filename: text("filename").notNull(),
+  /** roster | attributes | unusable */
+  role: text("role").notNull(),
+  sourceFormat: text("source_format").notNull(),
+  rowCount: integer("row_count").notNull(),
+  columnCount: integer("column_count").notNull(),
+  joinKey: text("join_key"),
+  matchedRows: integer("matched_rows").notNull().default(0),
+  unmatchedRows: integer("unmatched_rows").notNull().default(0),
+  conflicts: integer("conflicts").notNull().default(0),
+  /** JSON string[] */
+  contributedFieldsJson: text("contributed_fields_json").notNull().default("[]"),
+  /** JSON {column, field}[] — every column found and what it was read as. */
+  columnsJson: text("columns_json").notNull().default("[]"),
+  conversionDetail: text("conversion_detail").notNull().default(""),
+  detail: text("detail").notNull(),
+  needsReview: boolean("needs_review").notNull().default(false),
+  /** Upload order, so the report reads back the way the files were added. */
+  orderIndex: integer("order_index").notNull().default(0),
+});
+
+/**
  * Staging for uploads that arrive in pieces. The host rejects any single
  * request over ~4.5MB at its edge, before application code runs, so a larger
  * upload has to be sent as several small requests and reassembled here. Rows
@@ -78,3 +109,4 @@ export type ScenarioRow = typeof scenarios.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type IngestIssueRow = typeof ingestIssues.$inferSelect;
 export type UploadChunkRow = typeof uploadChunks.$inferSelect;
+export type SourceFileRow = typeof sourceFiles.$inferSelect;

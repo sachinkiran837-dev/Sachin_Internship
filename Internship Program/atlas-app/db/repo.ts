@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, lt } from "drizzle-orm";
 import { db } from "./client";
-import { auditLog, ingestIssues, orgs, positions, scenarios, uploadChunks } from "./schema";
+import { auditLog, ingestIssues, orgs, positions, scenarios, sourceFiles, uploadChunks } from "./schema";
 import type { IngestIssue, Position, Move, AuditEntry } from "@/lib/graph/types";
+import type { FileBinding } from "@/lib/ingest/bindFiles";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -79,6 +80,54 @@ export async function savePositions(rows: Position[]): Promise<void> {
   for (const batch of chunk(insertRows, INSERT_BATCH)) {
     await db.insert(positions).values(batch);
   }
+}
+
+export async function saveSourceFiles(orgId: string, bindings: FileBinding[]): Promise<void> {
+  if (bindings.length === 0) return;
+
+  await db.insert(sourceFiles).values(
+    bindings.map((b, i) => ({
+      id: randomUUID(),
+      orgId,
+      filename: b.filename,
+      role: b.role,
+      sourceFormat: b.sourceFormat,
+      rowCount: b.rowCount,
+      columnCount: b.columns.length,
+      joinKey: b.joinKey,
+      matchedRows: b.matchedRows,
+      unmatchedRows: b.unmatchedRows,
+      conflicts: b.conflicts,
+      contributedFieldsJson: JSON.stringify(b.contributedFields),
+      columnsJson: JSON.stringify(b.columns),
+      conversionDetail: b.conversionDetail,
+      detail: b.detail,
+      needsReview: b.needsReview,
+      orderIndex: i,
+    }))
+  );
+}
+
+export async function getSourceFiles(orgId: string): Promise<FileBinding[]> {
+  const rows = await db.select().from(sourceFiles).where(eq(sourceFiles.orgId, orgId));
+
+  return rows
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((r) => ({
+      filename: r.filename,
+      role: r.role as FileBinding["role"],
+      rowCount: r.rowCount,
+      joinKey: r.joinKey,
+      matchedRows: r.matchedRows,
+      unmatchedRows: r.unmatchedRows,
+      contributedFields: JSON.parse(r.contributedFieldsJson) as string[],
+      conflicts: r.conflicts,
+      detail: r.detail,
+      sourceFormat: r.sourceFormat,
+      conversionDetail: r.conversionDetail,
+      columns: JSON.parse(r.columnsJson) as FileBinding["columns"],
+      needsReview: r.needsReview,
+    }));
 }
 
 /**

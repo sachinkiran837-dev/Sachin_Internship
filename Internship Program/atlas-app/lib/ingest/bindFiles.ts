@@ -30,6 +30,12 @@ import { CANONICAL_FIELDS } from "@/lib/graph/types";
 
 export type FileRole = "roster" | "attributes" | "unusable";
 
+/** One source column and the canonical field it was recognised as, if any. */
+export interface ColumnReading {
+  column: string;
+  field: string | null;
+}
+
 export interface FileBinding {
   filename: string;
   role: FileRole;
@@ -43,6 +49,18 @@ export interface FileBinding {
   /** Values this file disagreed with the roster about — filled, never overwritten. */
   conflicts: number;
   detail: string;
+  /** How the file itself was recognised — "Excel", "PDF", "JSON" and so on. */
+  sourceFormat: string;
+  /** What the reader did to it, before any binding: the conversion note. */
+  conversionDetail: string;
+  /**
+   * Every column found, and what Atlas made of it. This is the part a client
+   * argues with — "where did our cost centre column go?" — so it is kept
+   * per-file rather than collapsed into the combined header list.
+   */
+  columns: ColumnReading[];
+  /** Rows a model transcribed rather than read from an export. */
+  needsReview: boolean;
 }
 
 export interface BoundDataset extends ParsedFile {
@@ -84,6 +102,7 @@ interface NormalisedFile {
   rows: Record<string, string>[];
   fields: Set<CanonicalField>;
   extras: string[];
+  columns: ColumnReading[];
 }
 
 const key = (v: string) => v.trim().toLowerCase();
@@ -118,7 +137,9 @@ function normalise(file: ReadableFile): NormalisedFile {
     return out;
   });
 
-  return { filename: file.filename, parsed: file.parsed, rows, fields, extras };
+  const columns = mapping.map((m) => ({ column: m.sourceColumn, field: m.targetField }));
+
+  return { filename: file.filename, parsed: file.parsed, rows, fields, extras, columns };
 }
 
 /**
@@ -163,6 +184,10 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
       contributedFields: [],
       conflicts: 0,
       detail: `Not used. ${f.error ?? "Atlas could not read this file."}`,
+      sourceFormat: "—",
+      conversionDetail: "The file could not be read, so nothing was taken from it.",
+      columns: [],
+      needsReview: false,
     });
   }
 
@@ -230,6 +255,10 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
       unmatchedRows: skipped,
       contributedFields: [...roster.fields, ...roster.extras],
       conflicts: 0,
+      sourceFormat: roster.parsed.conversion.sourceFormat,
+      conversionDetail: roster.parsed.conversion.detail,
+      columns: roster.columns,
+      needsReview: Boolean(roster.parsed.conversion.needsReview),
       detail:
         (promoted === roster
           ? `No file in this upload looked like a position list, so this one was used as the establishment — check the columns below carefully. `
@@ -257,6 +286,10 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
         unmatchedRows: f.rows.length,
         contributedFields: [],
         conflicts: 0,
+        sourceFormat: f.parsed.conversion.sourceFormat,
+        conversionDetail: f.parsed.conversion.detail,
+        columns: f.columns,
+        needsReview: Boolean(f.parsed.conversion.needsReview),
         detail:
           `Not used. Atlas could not find a position ID or a name in this file to match against the establishment, ` +
           `so there is no safe way to attach its ${f.rows.length} row${f.rows.length === 1 ? "" : "s"}. ` +
@@ -319,6 +352,10 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
       unmatchedRows: unmatched,
       contributedFields: [...contributed],
       conflicts,
+      sourceFormat: f.parsed.conversion.sourceFormat,
+      conversionDetail: f.parsed.conversion.detail,
+      columns: f.columns,
+      needsReview: Boolean(f.parsed.conversion.needsReview),
       detail:
         `Joined onto the establishment by ${joinKey === "positionId" ? "position ID" : "name"}: ` +
         `${matched} of ${f.rows.length} row${f.rows.length === 1 ? "" : "s"} matched` +

@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
-import { getBaselinePositions, getIssues, getOrg } from "@/db/repo";
+import { getBaselinePositions, getIssues, getOrg, getSourceFiles } from "@/db/repo";
 import { OrgNav } from "@/components/OrgNav";
+import { SourceDataReport } from "@/components/ingest/SourceDataReport";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,37 @@ export default async function OrgConfirmPage({
 
   const positions = await getBaselinePositions(orgId);
   const issues = await getIssues(orgId);
+  const sourceFiles = await getSourceFiles(orgId);
+
+  // How complete the establishment actually is, field by field. The headline
+  // count says how many rows arrived; this says how much of each row is
+  // usable, which is what decides whether a cost figure downstream means
+  // anything.
+  const statusSupplied = sourceFiles.some((f) => f.contributedFields.includes("status"));
+  const coverage = [
+    {
+      label: "Fully-loaded cost",
+      have: positions.filter((p) => p.cost > 0).length,
+      note: "the rest model as $0, which understates every saving",
+    },
+    {
+      label: "Reporting line",
+      have: positions.filter((p) => p.managerId !== null).length,
+      note: "the top role has none by definition",
+    },
+    {
+      label: "Department",
+      have: positions.filter((p) => p.department !== "Unclassified").length,
+      note: "needed to group and consolidate teams",
+    },
+    {
+      label: "Employment status",
+      have: statusSupplied ? positions.length : 0,
+      note: statusSupplied
+        ? `${positions.filter((p) => p.status === "vacant").length} vacant, ${positions.filter((p) => p.status === "contingent").length} contingent`
+        : "no status column arrived — every role is assumed filled",
+    },
+  ];
 
   const conversions = issues.filter((i) => i.kind === "conversion");
   const unmapped = issues.filter((i) => i.kind === "unmapped_column");
@@ -67,7 +99,10 @@ export default async function OrgConfirmPage({
             </p>
             <p className="text-sm text-foreground">{conversions[0].detail}</p>
 
-            {conversions.length > 1 && (
+            {/* The per-file lines live in the source report below once one
+                exists; this list is the fallback for establishments ingested
+                before that was recorded. */}
+            {sourceFiles.length === 0 && conversions.length > 1 && (
               <ul className="mt-2.5 flex flex-col gap-1.5 border-t border-primary/20 pt-2.5">
                 {conversions.slice(1).map((c) => {
                   const [filename, ...rest] = c.detail.split(" — ");
@@ -94,6 +129,41 @@ export default async function OrgConfirmPage({
             )}
           </div>
         )}
+
+        {sourceFiles.length > 0 && <SourceDataReport files={sourceFiles} />}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>How complete this establishment is</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {positions.length.toLocaleString()} positions arrived. This is how much of each one
+              is usable — a redesign is only as good as the fields underneath it.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {coverage.map((c) => {
+              const pct = positions.length === 0 ? 0 : (c.have / positions.length) * 100;
+              return (
+                <div key={c.label}>
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium">{c.label}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {c.have.toLocaleString()} of {positions.length.toLocaleString()} ·{" "}
+                      {pct.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full ${pct >= 90 ? "bg-primary" : pct >= 50 ? "bg-amber-500" : "bg-destructive"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{c.note}</p>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
 
         {reviewable.length === 0 && unusedFiles.length === 0 ? (
           <Card>

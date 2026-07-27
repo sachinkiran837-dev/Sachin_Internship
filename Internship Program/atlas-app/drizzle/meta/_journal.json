@@ -15,6 +15,13 @@
       "when": 1785148393824,
       "tag": "0001_jittery_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785150649833,
+      "tag": "0002_nappy_umar",
+      "breakpoints": true
     }
   ]
 }

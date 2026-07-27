@@ -14,7 +14,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ingestFileAction } from "../app/actions/ingest";
-import { getBaselinePositions, getIssues, listOrgs } from "../db/repo";
+import { getBaselinePositions, getIssues, getSourceFiles, listOrgs } from "../db/repo";
 import { computeMetrics } from "../lib/metrics/diagnostics";
 
 async function loadFile(name: string): Promise<File> {
@@ -171,6 +171,46 @@ async function main() {
 
   console.log(`3. good + unreadable → org "${mixedOrg.name}", ${mixedPositions.length} positions kept`);
   console.log(`   · ${refusal.detail.slice(0, 120)}…`);
+
+  // --- the per-file report the confirm screen reads ---------------------
+  const report = await getSourceFiles(org.id);
+  if (report.length !== 2) {
+    throw new Error(`expected a report row per uploaded file, got ${report.length}`);
+  }
+  if (report.map((r) => r.filename).join(",") !== "roster.csv,payroll.csv") {
+    throw new Error(`the report must read back in upload order, got ${report.map((r) => r.filename)}`);
+  }
+
+  const [rosterReport, payrollReport] = report;
+  if (rosterReport.role !== "roster" || payrollReport.role !== "attributes") {
+    throw new Error(`roles were not recorded: ${report.map((r) => `${r.filename}=${r.role}`)}`);
+  }
+  // The column-by-column reading is the part a client argues with, so it has
+  // to survive the round trip through the database intact.
+  const staffId = payrollReport.columns.find((c) => c.column === "Staff ID");
+  if (staffId?.field !== "positionId") {
+    throw new Error(`column readings were lost: ${JSON.stringify(payrollReport.columns)}`);
+  }
+  if (!payrollReport.contributedFields.includes("cost")) {
+    throw new Error("the report must record that payroll.csv supplied cost");
+  }
+  if (payrollReport.matchedRows !== 153 || payrollReport.conflicts !== 2) {
+    throw new Error(
+      `join stats did not persist: matched=${payrollReport.matchedRows} conflicts=${payrollReport.conflicts}`
+    );
+  }
+
+  const mixedReport = await getSourceFiles(mixedOrg.id);
+  const unusableRow = mixedReport.find((r) => r.filename === "handbook.rtf");
+  if (unusableRow?.role !== "unusable") {
+    throw new Error("an unreadable file must still appear in the report");
+  }
+
+  console.log(
+    `4. source report → ${report.length} files recorded: ` +
+      report.map((r) => `${r.filename} [${r.role}, ${r.columns.length} cols]`).join(", ")
+  );
+  console.log(`   unreadable files are listed too: handbook.rtf [${unusableRow.role}]`);
 
   console.log("PASSED");
 }
