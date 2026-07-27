@@ -28,7 +28,8 @@ export function MapStats({ metrics }: { metrics: DiagnosticMetrics }) {
       <Stat label="Fully-loaded cost" value={currency(metrics.totalCost)} />
       <Stat label="Protected roles" value={String(metrics.protectedCount)} />
       <Stat label="Vacant" value={String(metrics.vacantCount)} />
-      <Stat label="Contingent" value={String(metrics.contingentCount)} />
+      <Stat label="Agency / contingent" value={String(metrics.contingentCount)} />
+      <Stat label="Contracted FTE" value={metrics.totalFte.toFixed(0)} />
     </div>
   );
 }

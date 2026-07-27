@@ -3,6 +3,7 @@ import type { ParsedFile } from "./parseFile";
 import { mapColumns } from "./columnMapper";
 import { pseudonymize } from "./anonymize";
 import { classifyRoles, roleKey, type RoleClassification } from "./classify";
+import { note, type IngestNote } from "./notes";
 import type {
   ColumnMapping,
   FieldConfidence,
@@ -27,6 +28,8 @@ export interface BuildGraphResult {
   positions: Position[];
   issues: IngestIssue[];
   columnMapping: ColumnMapping[];
+  /** Readings the graph build had to make, for the register on the confirm screen. */
+  notes: IngestNote[];
 }
 
 function fieldConfidence(mapping: ColumnMapping[], field: string): number {
@@ -44,9 +47,36 @@ function parseCost(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * An FTE column is read as it stands, including zero.
+ *
+ * Zero is not a missing value in a workforce file — it is a statement that
+ * the person holds no contracted establishment, which is how these systems
+ * record agency and casual staffing. Rounding it up to 1 (as this used to)
+ * silently converts several hundred agency workers into full-time employees
+ * and inflates every FTE-based figure on every screen. A genuinely absent or
+ * unreadable value is a different thing, and still reads as one full-time
+ * equivalent.
+ */
 function parseFte(raw: string): number {
   const n = parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : 1;
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+
+/**
+ * A position at zero contracted FTE is agency staffing.
+ *
+ * This is a reading, not something the column says, and it is registered as
+ * an assumption for the client to overrule. But it is the reading that makes
+ * the map true: these people are on the establishment's org chart and doing
+ * its work, and treating them as ordinary employees — or as an absence —
+ * both misstate what the organisation is. `contingent` is the status Atlas
+ * already holds for labour it does not employ.
+ */
+function agencyStatus(fte: number, stated: PositionStatus, hadStatusColumn: boolean): PositionStatus {
+  // A file that states the status outright is believed over any inference.
+  if (hadStatusColumn && stated !== "filled") return stated;
+  return fte === 0 ? "contingent" : stated;
 }
 
 function parseStatus(raw: string): PositionStatus {
@@ -166,6 +196,8 @@ export async function buildOrgGraph(
     }
     seenIds.add(positionIdRaw);
 
+    const fte = fteCol ? parseFte(row[fteCol]) : 1;
+
     rawRows.push({
       sourceRowIndex: index,
       positionIdRaw,
@@ -174,8 +206,8 @@ export async function buildOrgGraph(
       department: (deptCol ? row[deptCol] : "").trim() || "Unclassified",
       managerNameRaw: (managerCol ? row[managerCol] : "").trim(),
       cost: costCol ? parseCost(row[costCol]) : 0,
-      fte: fteCol ? parseFte(row[fteCol]) : 1,
-      status: statusCol ? parseStatus(row[statusCol]) : "filled",
+      fte,
+      status: agencyStatus(fte, statusCol ? parseStatus(row[statusCol]) : "filled", Boolean(statusCol)),
       group: options.groupBy ? (row[options.groupBy.column] ?? "").trim() : "",
     });
   });
@@ -441,5 +473,49 @@ export async function buildOrgGraph(
   });
 
   // Headings first, so the root of the map is the first row with no manager.
-  return { positions: [...syntheticPositions, ...positions], issues, columnMapping };
+  return {
+    positions: [...syntheticPositions, ...positions],
+    issues,
+    columnMapping,
+    notes: agencyNote(positions, Boolean(fteCol)),
+  };
+}
+
+/**
+ * States the agency reading, because it is a reading.
+ *
+ * Zero FTE meaning "agency" is true of the workforce systems these files come
+ * out of, and it is not written down anywhere in the file. It changes who
+ * appears on the map as employed labour and who appears as bought-in, which
+ * is one of the first things a redesign conversation turns on — so it belongs
+ * in the register, with the count, rather than in a code comment.
+ */
+function agencyNote(positions: Position[], hadFteColumn: boolean): IngestNote[] {
+  const agency = positions.filter((p) => !p.synthetic && p.fte === 0);
+  if (!hadFteColumn || agency.length === 0) return [];
+
+  const employed = positions.filter((p) => !p.synthetic).length - agency.length;
+  const departments = [...new Set(agency.map((p) => p.department))].filter(
+    (d) => d !== "Unclassified"
+  );
+
+  return [
+    note("agency-zero-fte", "assumption", {
+      topic: "Agency staffing",
+      statement: `${agency.length.toLocaleString()} positions record 0 FTE, and Atlas has read every one of them as agency staffing rather than as employed headcount.`,
+      evidence:
+        `Zero contracted FTE alongside a live pay rate is how these systems record labour the organisation ` +
+        `uses but does not employ. They are shown on the map as contingent and can be filtered to on their own` +
+        (departments.length > 0
+          ? `, and they sit across ${departments.length} department${departments.length === 1 ? "" : "s"}` +
+            (departments.length <= 4 ? ` — ${departments.join(", ")}` : "")
+          : "") +
+        `. The other ${employed.toLocaleString()} positions carry contracted FTE and read as employed.`,
+      effect:
+        `Agency staff contribute headcount but no establishment FTE, so they carry no cost in a cost × FTE ` +
+        `model — that is what a 0 FTE row means arithmetically. Redesign plays that in-house contingent labour ` +
+        `read this population; if any of them are actually employees whose FTE was left blank, say so and ` +
+        `Atlas will read the column differently.`,
+    }),
+  ];
 }

@@ -28,6 +28,21 @@ function buildFindings(metrics: DiagnosticMetrics): Finding[] {
     });
   }
 
+  if (metrics.contingentCount > 0) {
+    const share = (metrics.contingentCount / Math.max(metrics.headcount, 1)) * 100;
+    findings.push({
+      id: randomUUID(),
+      headline: `${metrics.contingentCount} of ${metrics.headcount} positions are agency or contingent labour`,
+      soWhat:
+        `${share.toFixed(0)}% of the people on this chart are not employed by the organisation — they hold no ` +
+        `contracted FTE, which is why headcount (${metrics.headcount}) and contracted establishment ` +
+        `(${metrics.totalFte.toFixed(0)} FTE) differ. Converting a share of them to permanent roles, or ` +
+        `reducing reliance on them, is usually the largest single lever available.`,
+      evidenceIds: ["contingentCount", "headcount", "totalFte"],
+      followups: ["What is the annual agency spend behind these positions?"],
+    });
+  }
+
   for (const pattern of metrics.flaggedPatterns) {
     if (findings.length >= MAX_FINDINGS) break;
     findings.push({
@@ -42,9 +57,9 @@ function buildFindings(metrics: DiagnosticMetrics): Finding[] {
   if (findings.length < MAX_FINDINGS) {
     findings.push({
       id: randomUUID(),
-      headline: `${metrics.headcount} positions, ${currency(metrics.totalCost)} in fully-loaded cost, ${metrics.layers} layers`,
+      headline: `${metrics.headcount} positions, ${metrics.totalFte.toFixed(0)} contracted FTE, ${currency(metrics.totalCost)} in fully-loaded cost, ${metrics.layers} layers`,
       soWhat: `Average span of control is ${metrics.averageSpan.toFixed(1)} direct reports across ${metrics.layers} management layers.`,
-      evidenceIds: ["headcount", "totalCost", "layers", "averageSpan"],
+      evidenceIds: ["headcount", "totalFte", "totalCost", "layers", "averageSpan"],
       followups: ["Does the layer count match the client's stated target operating model?"],
     });
   }
@@ -61,7 +76,34 @@ function fallbackNarrative(metrics: DiagnosticMetrics, findings: Finding[]): str
   return `${lead} ${body}`;
 }
 
-export async function generateFindings(metrics: DiagnosticMetrics): Promise<FindingsResult> {
+/**
+ * The findings themselves: ranked, capped, evidence-cited, and computed
+ * entirely from the metrics. No network, no key, no waiting — this is what a
+ * client is actually being shown, and it must never be held up by the
+ * sentence that introduces it.
+ */
+export function buildFindingsResult(metrics: DiagnosticMetrics): FindingsResult {
+  const findings = buildFindings(metrics);
+  return {
+    narrative: fallbackNarrative(metrics, findings),
+    findings,
+    followups: findings.flatMap((f) => f.followups),
+    source: "fallback",
+  };
+}
+
+/** Time the wording gets before the computed narrative is used instead. */
+const NARRATIVE_TIMEOUT_MS = 12_000;
+
+/**
+ * The framing paragraph, drafted from figures that are already final.
+ *
+ * Kept separate and time-boxed because it is the only slow part of this page
+ * and the least important: a findings screen that renders in 7 seconds — or
+ * times out at the host's edge and renders not at all — has failed at the one
+ * thing it is for, whatever the prose was going to say.
+ */
+export async function generateNarrative(metrics: DiagnosticMetrics): Promise<FindingsResult> {
   const findings = buildFindings(metrics);
   const fallback = fallbackNarrative(metrics, findings);
   const followups = findings.flatMap((f) => f.followups);
@@ -72,24 +114,29 @@ export async function generateFindings(metrics: DiagnosticMetrics): Promise<Find
 
   try {
     const client = getAnthropicClient();
-    const message = await client.messages.create({
-      model: AI_MODEL,
-      max_tokens: 400,
-      messages: [
-        {
-          role: "user",
-          content: `You are writing a short narrative for a Project Partner to read out to a client, framing already-computed operating-model metrics. Do not invent or recompute any number — only reference the figures given. Every claim must be traceable to one of these findings.\n\nMetrics: ${JSON.stringify(
-            {
-              headcount: metrics.headcount,
-              totalCost: metrics.totalCost,
-              layers: metrics.layers,
-              averageSpan: metrics.averageSpan,
-              protectedCount: metrics.protectedCount,
-            }
-          )}\n\nFindings: ${JSON.stringify(findings.map((f) => ({ headline: f.headline, soWhat: f.soWhat })))}\n\nWrite 2-4 sentences, plain language, no bullet points.`,
-        },
-      ],
-    });
+    const message = await client.messages.create(
+      {
+        model: AI_MODEL,
+        max_tokens: 400,
+        messages: [
+          {
+            role: "user",
+            content: `You are writing a short narrative for a Project Partner to read out to a client, framing already-computed operating-model metrics. Do not invent or recompute any number — only reference the figures given. Every claim must be traceable to one of these findings.\n\nMetrics: ${JSON.stringify(
+              {
+                headcount: metrics.headcount,
+                totalFte: metrics.totalFte,
+                contingentCount: metrics.contingentCount,
+                totalCost: metrics.totalCost,
+                layers: metrics.layers,
+                averageSpan: metrics.averageSpan,
+                protectedCount: metrics.protectedCount,
+              }
+            )}\n\nFindings: ${JSON.stringify(findings.map((f) => ({ headline: f.headline, soWhat: f.soWhat })))}\n\nWrite 2-4 sentences, plain language, no bullet points.`,
+          },
+        ],
+      },
+      { timeout: NARRATIVE_TIMEOUT_MS }
+    );
 
     const text = message.content.find((b) => b.type === "text");
     const narrative = text && text.type === "text" ? text.text.trim() : fallback;

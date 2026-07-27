@@ -119,7 +119,7 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
                 {file.needsReview && (
                   <Badge variant="outline" className="shrink-0 gap-1">
                     <Sparkles className="size-3" aria-hidden />
-                    Read by AI
+                    From a drawing
                   </Badge>
                 )}
                 <Badge
@@ -220,9 +220,9 @@ export function SourceDataReport({ files }: { files: FileBinding[] }) {
 
                   {file.needsReview && (
                     <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200">
-                      These rows were transcribed from a picture by a model rather than exported
-                      from a system. Check them against the source before treating this as a
-                      baseline.
+                      These rows were read out of a picture rather than exported from a system, so
+                      the names and the reporting lines are a transcription. Check them against the
+                      original before treating this as a baseline.
                     </p>
                   )}
                 </div>

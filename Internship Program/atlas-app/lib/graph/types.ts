@@ -146,6 +146,8 @@ export interface DiagnosticMetrics {
   filledCount: number;
   vacantCount: number;
   contingentCount: number;
+  /** Sum of contracted FTE. Diverges from headcount wherever agency staff sit at 0. */
+  totalFte: number;
   totalCost: number;
   layers: number;
   averageSpan: number;

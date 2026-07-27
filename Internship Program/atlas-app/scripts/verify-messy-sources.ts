@@ -20,6 +20,7 @@ import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
 import { buildOrgGraph } from "../lib/ingest/buildGraph";
 import { computeMetrics } from "../lib/metrics/diagnostics";
 import { EMPTY_ANSWERS } from "../lib/ingest/answers";
+import { EMPTY_PLAN_ANSWERS } from "../lib/ingest/plan";
 import { costCoverage } from "../lib/ingest/reconcile";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -363,6 +364,7 @@ async function main() {
     files: [],
     groupBy: { columns: ["Source Brand", "BRAND"], label: "Brand", topLabel: "Kinyara Group" },
     rowFilter: null,
+    answers: EMPTY_PLAN_ANSWERS,
     notes: "",
     warnings: [],
     source: "ai",

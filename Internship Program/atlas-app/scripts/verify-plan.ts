@@ -15,7 +15,7 @@
 import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
 import { buildOrgGraph } from "../lib/ingest/buildGraph";
 import { computeMetrics } from "../lib/metrics/diagnostics";
-import { planIngest, validatePlan, type IngestPlan } from "../lib/ingest/plan";
+import { EMPTY_PLAN_ANSWERS, planIngest, validatePlan, type IngestPlan } from "../lib/ingest/plan";
 import { remove, reassign } from "../lib/scenario/moves";
 import { getBaselineRootId } from "../db/repo";
 import { hasAI } from "../lib/ai/client";
@@ -51,6 +51,7 @@ function plan(overrides: Partial<IngestPlan>): IngestPlan {
     files: [],
     groupBy: null,
     rowFilter: null,
+    answers: EMPTY_PLAN_ANSWERS,
     notes: "",
     warnings: [],
     source: "ai",

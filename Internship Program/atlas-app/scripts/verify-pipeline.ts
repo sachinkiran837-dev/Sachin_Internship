@@ -20,7 +20,7 @@ import { computeMetrics } from "../lib/metrics/diagnostics";
 import { reassign, remove } from "../lib/scenario/moves";
 import { parseScenarioText } from "../lib/scenario/moveParser";
 import { hasAI } from "../lib/ai/client";
-import { generateFindings } from "../lib/findings/generate";
+import { generateNarrative } from "../lib/findings/generate";
 import { findSafeStaffingBreaches } from "../lib/scenario/compare";
 import {
   createOrg,
@@ -154,7 +154,7 @@ async function main() {
   console.log(
     `10. Findings synthesis (C3 narrative layer, ${hasAI() ? "live model" : "deterministic fallback, no ANTHROPIC_API_KEY"})...`
   );
-  const findings = await generateFindings(postFlattenMetrics);
+  const findings = await generateNarrative(postFlattenMetrics);
   // Either path is correct; what must hold is that the app never claims one
   // while running the other.
   assert(

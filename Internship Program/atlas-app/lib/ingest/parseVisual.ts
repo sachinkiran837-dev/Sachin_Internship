@@ -61,7 +61,6 @@ Rules, in order of importance:
 
 interface VisualExtraction {
   rows: Record<string, string>[];
-  model: string;
 }
 
 export function isVisualFile(filename: string): boolean {
@@ -89,7 +88,7 @@ export async function parseVisualFile(filename: string, buffer: Buffer): Promise
     );
   }
 
-  const { rows, model } = await extract(filename, buffer, format.ext);
+  const { rows } = await extract(filename, buffer, format.ext);
 
   if (rows.length === 0) {
     throw new UnsupportedFileError(
@@ -116,11 +115,11 @@ export async function parseVisualFile(filename: string, buffer: Buffer): Promise
     conversion: {
       sourceFormat: format.label,
       detail:
-        `Read by ${model} directly from the ${noun}: ${normalised.length} position${normalised.length === 1 ? "" : "s"} transcribed ` +
+        `Read directly from the ${noun}: ${normalised.length} position${normalised.length === 1 ? "" : "s"} transcribed ` +
         `into ${headers.length} column${headers.length === 1 ? "" : "s"}.`,
       rowCount: normalised.length,
       needsReview:
-        `Every row from "${filename}" was transcribed from a ${noun} by a model, not exported from a system. ` +
+        `Every row from "${filename}" was transcribed from a ${noun} rather than exported from a system. ` +
         `Check the names, reporting lines and any figures against the source before treating this as a baseline.`,
     },
   };
@@ -168,7 +167,7 @@ async function extract(filename: string, buffer: Buffer, ext: string): Promise<V
     .join("")
     .trim();
 
-  return { rows: parseRows(text, filename), model: response.model };
+  return { rows: parseRows(text, filename) };
 }
 
 function parseRows(raw: string, filename: string): Record<string, string>[] {

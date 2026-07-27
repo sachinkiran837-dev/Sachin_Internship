@@ -353,7 +353,7 @@ function EstablishmentMapInner({
             <option value="all">All flags</option>
             <option value="protected">Protected</option>
             <option value="vacant">Vacant</option>
-            <option value="contingent">Contingent</option>
+            <option value="contingent">Agency / contingent</option>
             <option value="thin">Thin span</option>
             <option value="wide">Wide span</option>
             <option value="singleReport">Single-report</option>

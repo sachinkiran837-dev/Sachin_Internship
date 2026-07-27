@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { runIngest } from "@/lib/ingest/run";
 import { mergeAnswers } from "@/lib/ingest/answers";
-import { getAnswers, getOrg, getSourceBlobs } from "@/db/repo";
+import { getAnswers, getNotes, getOrg, getSourceBlobs, getSourceFiles } from "@/db/repo";
 
 /**
  * Answers the questions Atlas raised, and reads the establishment again with
@@ -57,6 +57,15 @@ export async function answerIngestAction(
       .filter(Boolean)
       .join("\n\n");
 
+    // Everything Atlas concluded last time goes with the correction, so what
+    // reads the client's sentence can see the reading being corrected — the
+    // roles it gave each file, the questions it could not close, the values
+    // it found. Without it, "the chart isn't the structure" is unanswerable.
+    const [priorFiles, priorNotes] = await Promise.all([
+      getSourceFiles(orgId),
+      getNotes(orgId),
+    ]);
+
     const result = await runIngest({
       orgId,
       incoming: blobs,
@@ -64,6 +73,19 @@ export async function answerIngestAction(
       context,
       anonymize: org.anonymized,
       answers: { ...answers, extraContext: "" },
+      prior: {
+        files: priorFiles.map((f) => ({
+          filename: f.filename,
+          role: f.role,
+          detail: f.detail,
+        })),
+        notes: priorNotes.map((n) => ({
+          kind: n.kind,
+          topic: n.topic,
+          statement: n.statement,
+        })),
+        groupValues: [],
+      },
     });
 
     if ("error" in result) return { error: result.error, ok: false };

@@ -1,6 +1,7 @@
 import { AI_MODEL, getAnthropicClient, hasAI } from "@/lib/ai/client";
 import { CANONICAL_FIELDS } from "@/lib/graph/types";
 import type { ParsedFile } from "./parseFile";
+import { COMPOSED_COST, COMPOSED_NAME } from "./composeColumns";
 
 /**
  * Turns a sentence of context from the person uploading — "these files cover
@@ -71,10 +72,29 @@ export interface RowFilter {
   exclude: string[];
 }
 
+/**
+ * Facts about the client's own data that no file states and only they know:
+ * how many hours a full-time week is, which of their brand codes means which
+ * brand. Normally these are collected as structured answers on the confirm
+ * screen. The planner can also read them out of a sentence — "a full-time
+ * week here is 38 hours and AUH is AgeUp" — which is the point of letting
+ * someone describe a correction in their own words rather than hunting for
+ * the right box.
+ *
+ * Read, never invented: the planner is told to leave these null unless the
+ * person actually said so, and everything it returns is checked against the
+ * values that exist in the files before it is applied.
+ */
+export interface PlanAnswers {
+  hoursPerWeek: number | null;
+  valueMap: Record<string, Record<string, string>>;
+}
+
 export interface IngestPlan {
   files: FilePlan[];
   groupBy: GroupPlan | null;
   rowFilter: RowFilter | null;
+  answers: PlanAnswers;
   /** The planner's summary of what it decided, in plain English. */
   notes: string;
   /** Everything the planner asked for that could not be honoured. */
@@ -88,7 +108,35 @@ export interface PlanInput {
   parsed: ParsedFile;
 }
 
+/**
+ * What Atlas made of these same files last time, handed back to the planner
+ * when the client is correcting it.
+ *
+ * Without this, a correction is answered by a reader that has never seen the
+ * thing being corrected: "the chart isn't the structure" means nothing unless
+ * you know Atlas used it as the structure. With it, the planner is looking at
+ * its own previous conclusions, the questions it could not resolve, and the
+ * sentence the client wrote in response — which is the whole of the context a
+ * person would need to fix it themselves.
+ */
+export interface PriorRead {
+  files: { filename: string; role: string; detail: string }[];
+  notes: { kind: string; topic: string; statement: string }[];
+  groupValues: { value: string; files: string[]; count: number }[];
+}
+
 const CANONICAL_KEYS = Object.keys(CANONICAL_FIELDS);
+
+export const EMPTY_PLAN_ANSWERS: PlanAnswers = { hoursPerWeek: null, valueMap: {} };
+
+/** True when the planner read something out of the text that changes a figure. */
+export function planAnswersHaveEffect(answers: PlanAnswers | undefined): boolean {
+  if (!answers) return false;
+  return answers.hoursPerWeek !== null || Object.keys(answers.valueMap).length > 0;
+}
+
+/** Nobody works more hours a week than exist in one. */
+const MAX_HOURS_PER_WEEK = 168;
 
 /** Rows shown to the planner per file. Enough to recognise a column, not a copy of the data. */
 const SAMPLE_ROWS = 4;
@@ -110,6 +158,8 @@ Return ONLY a JSON object. No prose before or after it, no markdown code fences.
   ],
   "groupBy": { "columns": ["<source column>", "…one per file that carries this dimension"], "label": "<singular noun>", "topLabel": "<name for the combined top node>" } | null,
   "rowFilter": { "column": "<source column>", "include": ["<value>"], "exclude": ["<value>"] } | null,
+  "answers": { "hoursPerWeek": <number> | null,
+               "valueMap": { "<dimension name, matching groupBy.label>": { "<value exactly as it appears in a file>": "<the value it should be read as, exactly as it appears in a file>" } } },
   "notes": "<2-4 sentences to the client: what you concluded and what you did about it>"
 }
 
@@ -123,11 +173,14 @@ Canonical fields for "columns": ${CANONICAL_KEYS.join(", ")}. Use "ignore" as th
 
 Rules, in order of importance:
 1. Only override a column in "columns" when the automatic reading would be wrong or is clearly missing something. It already matches obvious names. Never map two source columns in one file to the same canonical field.
+1b. Some columns are ones Atlas built from the file's own — "${COMPOSED_NAME}" from a split first/last name, "${COMPOSED_COST}" from a pay rate. Never map a different column to a field one of those already holds. A column of hourly or daily rates is not a cost, and mapping it to "cost" prices a person at one hour's pay; if such a column looks empty it is because the hours behind it are unknown, which is a question for the client, not a mapping to fix.
 2. Follow the instruction. If it says the structure comes from a chart and the numbers from a spreadsheet, say so through "use", even when the spreadsheet also looks like a position list.
 3. A chart or a diagram is "structure" whenever there is also a fuller staff list to lay it over. It is "positions" only when it is the only thing describing who exists.
 4. Set "groupBy" only when the instruction asks for consolidation by some dimension AND a column carrying that dimension actually exists. List the exact column from EVERY file that carries it — two systems rarely name it the same way, and a file whose column you leave out will not be grouped at all. Do not list a column that merely correlates with the dimension.
 5. Set "rowFilter" only when the instruction restricts which rows are in scope. Leave "include" or "exclude" empty when unused.
-6. Never invent a filename, a column name or a value. Copy them exactly as given to you. If the instruction asks for something the files cannot support, say so in "notes" and leave the corresponding part of the plan null.`;
+6. "answers" carries facts about the organisation that no file states. Set "hoursPerWeek" only when the person says how many hours a full-time week is — it turns hourly rates into annual costs, so a wrong number misprices everyone paid by the hour. Set "valueMap" only when they say that two values naming the same thing should be read as one ("AUH is AgeUp"); both sides must be values that actually appear in the files. Leave either null or empty otherwise. Never infer them from the data.
+7. Never invent a filename, a column name or a value. Copy them exactly as given to you. If the instruction asks for something the files cannot support, say so in "notes" and leave the corresponding part of the plan null.
+8. When you are shown what Atlas concluded on a previous read, the person is correcting that reading. Address what they raise, and repeat the parts of the plan that were right — the plan you return replaces the previous one entirely, so anything you leave out is undone.`;
 
 /**
  * Builds a plan from the user's context, or returns a plan-shaped record of
@@ -137,7 +190,9 @@ Rules, in order of importance:
  */
 export async function planIngest(
   context: string,
-  files: PlanInput[]
+  files: PlanInput[],
+  /** What Atlas concluded last time, when this run is a correction of it. */
+  prior: PriorRead | null = null
 ): Promise<IngestPlan | null> {
   const instruction = context.trim();
   if (!instruction || files.length === 0) return null;
@@ -147,6 +202,7 @@ export async function planIngest(
       files: [],
       groupBy: null,
       rowFilter: null,
+      answers: EMPTY_PLAN_ANSWERS,
       notes:
         "Your instructions were recorded but not applied. Reading them takes the Anthropic API, " +
         "and this deployment has no ANTHROPIC_API_KEY set, so the files were bound by their column " +
@@ -161,7 +217,11 @@ export async function planIngest(
     const client = getAnthropicClient();
     const response = await client.messages.create({
       model: AI_MODEL,
-      max_tokens: 4000,
+      // A plan for a folder of ten files, each with forty columns, is a long
+      // object — and a plan cut off mid-object is not a smaller plan, it is
+      // no plan at all. This ceiling is set well above any real one so that
+      // running out of room is a bug rather than a Tuesday.
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -169,6 +229,7 @@ export async function planIngest(
           content:
             `The person uploading these files says:\n\n"""\n${instruction}\n"""\n\n` +
             `Here is what actually arrived.\n\n${files.map(digest).join("\n\n")}\n\n` +
+            (prior ? `${priorDigest(prior)}\n\n` : "") +
             `Return the plan as JSON.`,
         },
       ],
@@ -179,12 +240,33 @@ export async function planIngest(
       .join("")
       .trim();
 
+    // A truncated plan and a malformed one look identical by the time they
+    // reach the parser, and they call for completely different responses —
+    // so the one case that can be told apart is told apart here.
+    if (response.stop_reason === "max_tokens") {
+      return {
+        files: [],
+        groupBy: null,
+        rowFilter: null,
+        answers: EMPTY_PLAN_ANSWERS,
+        notes:
+          `Your instructions were recorded but not applied — reading them across ${files.length} file` +
+          `${files.length === 1 ? "" : "s"} produced a plan too long to finish, so none of it was used ` +
+          `rather than half of it. The files were bound by their column names alone. Uploading fewer ` +
+          `files at once, or narrowing the instructions, will get them read.`,
+        warnings: [],
+        source: "failed",
+        model: response.model,
+      };
+    }
+
     return validatePlan(text, files, response.model);
   } catch (err) {
     return {
       files: [],
       groupBy: null,
       rowFilter: null,
+      answers: EMPTY_PLAN_ANSWERS,
       notes:
         `Your instructions were recorded but not applied — reading them failed (${(err as Error).message}). ` +
         `The files were bound by their column names alone, which is what happens with the box left empty.`,
@@ -215,9 +297,48 @@ function digest(file: PlanInput): string {
   return lines.join("\n");
 }
 
-function truncate(value: string): string {
+/**
+ * The previous read, as the planner sees it: what it decided each file was
+ * for, what it could not resolve, and the values it found in the dimension
+ * being consolidated on. This is what turns "the chart isn't the structure"
+ * from an unanswerable remark into a correction.
+ */
+function priorDigest(prior: PriorRead): string {
+  const lines = ["ATLAS HAS ALREADY READ THESE FILES ONCE. What it concluded:"];
+
+  for (const f of prior.files) {
+    lines.push(`  ${f.filename} — used as: ${f.role}. ${truncate(f.detail, 220)}`);
+  }
+
+  const open = prior.notes.filter((n) => n.kind === "question");
+  const made = prior.notes.filter((n) => n.kind === "assumption");
+
+  if (open.length > 0) {
+    lines.push("", "What it could NOT resolve, and is asking the client about:");
+    for (const n of open) lines.push(`  [${n.topic}] ${truncate(n.statement, 240)}`);
+  }
+  if (made.length > 0) {
+    lines.push("", "Readings it made and applied:");
+    for (const n of made) lines.push(`  [${n.topic}] ${truncate(n.statement, 240)}`);
+  }
+
+  if (prior.groupValues.length > 0) {
+    lines.push("", "Values found in the consolidation column, and which file each came from:");
+    for (const v of prior.groupValues.slice(0, 40)) {
+      lines.push(`  "${v.value}" — ${v.count} rows, in ${v.files.join(" + ")}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "The instruction above includes what the client has now said in response to that reading. Correct it."
+  );
+  return lines.join("\n");
+}
+
+function truncate(value: string, limit = MAX_VALUE_CHARS): string {
   const v = value.trim().replace(/\s+/g, " ");
-  return v.length > MAX_VALUE_CHARS ? `${v.slice(0, MAX_VALUE_CHARS)}…` : v;
+  return v.length > limit ? `${v.slice(0, limit)}…` : v;
 }
 
 /**
@@ -240,6 +361,7 @@ export function validatePlan(
       files: [],
       groupBy: null,
       rowFilter: null,
+      answers: EMPTY_PLAN_ANSWERS,
       notes:
         "Your instructions were recorded but not applied — the plan came back in a shape Atlas could not read. " +
         "The files were bound by their column names alone.",
@@ -286,10 +408,13 @@ export function validatePlan(
     });
   }
 
+  const groupBy = validateGroupBy(parsed.groupBy, files, warnings);
+
   return {
     files: filePlans,
-    groupBy: validateGroupBy(parsed.groupBy, files, warnings),
+    groupBy,
     rowFilter: validateRowFilter(parsed.rowFilter, files, warnings),
+    answers: validateAnswers(parsed.answers, files, groupBy, warnings),
     notes: String(parsed.notes ?? "").trim(),
     warnings,
     source: "ai",
@@ -324,6 +449,20 @@ function validateColumns(
       warnings.push(`"${actual}" in ${file.filename} was mapped to "${field}", which is not a field Atlas holds — ignored.`);
       continue;
     }
+    // A field Atlas built a column for is not up for grabs. The composed
+    // column exists precisely because the raw one does not hold that value:
+    // "Rate" is what someone earns in an hour, and a plan that maps it to
+    // cost prices a care worker's year at $36.
+    const composed = field === "cost" ? COMPOSED_COST : field === "name" ? COMPOSED_NAME : null;
+    if (composed && actual !== composed && headers.includes(composed)) {
+      warnings.push(
+        `The plan mapped "${actual}" in ${file.filename} to ${field}, but Atlas had already built a "${composed}" ` +
+          `column from that file for exactly this — "${actual}" on its own is not ${field === "cost" ? "an annual cost" : "a full name"}. ` +
+          `The built column was kept.`
+      );
+      continue;
+    }
+
     // Two columns on one field would silently make one of them win. The
     // establishment is better off reading the second as an extra column.
     if (takenFields.has(field)) {
@@ -384,6 +523,81 @@ function validateGroupBy(raw: unknown, files: PlanInput[], warnings: string[]): 
     label: String(raw.label ?? "").trim() || columns[0],
     topLabel: String(raw.topLabel ?? "").trim() || "Consolidated organisation",
   };
+}
+
+/**
+ * Checks the facts the planner says the client stated.
+ *
+ * These are the only part of a plan that moves money directly — an hours
+ * figure reprices everyone paid by the hour — so both sides of every pairing
+ * must be a value that actually appears in the files, and an hours figure has
+ * to be a number of hours in a week. A pairing to something nobody wrote down
+ * would merge a real part of the organisation into an invented one.
+ */
+function validateAnswers(
+  raw: unknown,
+  files: PlanInput[],
+  groupBy: GroupPlan | null,
+  warnings: string[]
+): PlanAnswers {
+  if (!isRecord(raw)) return EMPTY_PLAN_ANSWERS;
+
+  const hours = Number(raw.hoursPerWeek);
+  let hoursPerWeek: number | null = null;
+  if (Number.isFinite(hours) && hours > 0) {
+    if (hours <= MAX_HOURS_PER_WEEK) {
+      hoursPerWeek = hours;
+    } else {
+      warnings.push(
+        `Your instructions were read as saying a full-time week is ${hours} hours, which is more hours than a week holds — ignored.`
+      );
+    }
+  }
+
+  const valueMap: Record<string, Record<string, string>> = {};
+  if (isRecord(raw.valueMap)) {
+    // Every value the files actually contain, so a pairing can be checked
+    // against reality rather than against the planner's memory of it.
+    const known = new Set<string>();
+    for (const file of files) {
+      for (const row of file.parsed.rows) {
+        for (const value of Object.values(row)) {
+          const v = value.trim();
+          if (v && v.length <= MAX_VALUE_CHARS) known.add(v.toLowerCase());
+        }
+      }
+    }
+
+    for (const [dimension, pairs] of Object.entries(raw.valueMap)) {
+      if (!isRecord(pairs)) continue;
+      // The binder looks the map up under the dimension's label, so a map
+      // filed under anything else would never be applied.
+      const column = groupBy && normaliseHeader(dimension) === normaliseHeader(groupBy.label)
+        ? groupBy.label
+        : (groupBy?.label ?? dimension);
+
+      const clean: Record<string, string> = {};
+      for (const [from, to] of Object.entries(pairs)) {
+        const target = String(to ?? "").trim();
+        const source = from.trim();
+        if (!source || !target) continue;
+        if (!known.has(source.toLowerCase()) || !known.has(target.toLowerCase())) {
+          warnings.push(
+            `Your instructions were read as pairing "${source}" with "${target}", but ${
+              known.has(source.toLowerCase()) ? `"${target}"` : `"${source}"`
+            } does not appear anywhere in these files — that pairing was dropped.`
+          );
+          continue;
+        }
+        clean[source] = target;
+      }
+      if (Object.keys(clean).length > 0) {
+        valueMap[column] = { ...(valueMap[column] ?? {}), ...clean };
+      }
+    }
+  }
+
+  return { hoursPerWeek, valueMap };
 }
 
 function validateRowFilter(raw: unknown, files: PlanInput[], warnings: string[]): RowFilter | null {
@@ -465,6 +679,9 @@ export function planHasEffect(plan: IngestPlan | null): boolean {
   return Boolean(
     plan &&
       plan.source === "ai" &&
-      (plan.files.length > 0 || plan.groupBy !== null || plan.rowFilter !== null)
+      (plan.files.length > 0 ||
+        plan.groupBy !== null ||
+        plan.rowFilter !== null ||
+        planAnswersHaveEffect(plan.answers))
   );
 }

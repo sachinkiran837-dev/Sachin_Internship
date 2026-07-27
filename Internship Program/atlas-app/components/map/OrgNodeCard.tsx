@@ -117,7 +117,9 @@ export function OrgNodeCard({ data }: NodeProps) {
           )}
           {p.flags.contingent && (
             <Badge variant="secondary" className="text-[10px]">
-              contingent
+              {/* Zero contracted FTE is how a workforce system records agency
+                  labour, so the card says which kind of contingent it is. */}
+              {p.fte === 0 ? "agency" : "contingent"}
             </Badge>
           )}
           {p.flags.singleReport && (

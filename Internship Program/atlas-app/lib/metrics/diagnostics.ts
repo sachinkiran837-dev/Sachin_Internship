@@ -42,6 +42,9 @@ export function computeMetrics(positions: Position[], rootId: string | null): Di
     filledCount: nodes.filter((n) => n.status === "filled").length,
     vacantCount: nodes.filter((n) => n.status === "vacant").length,
     contingentCount: nodes.filter((n) => n.status === "contingent").length,
+    // Headcount counts people; this counts establishment. The gap between
+    // them is the agency population, and it is the gap a redesign argues over.
+    totalFte: nodes.reduce((sum, n) => sum + n.fte, 0),
     totalCost: nodes.reduce((sum, n) => sum + n.cost * n.fte, 0),
     // Depth is measured from the top of the real structure, so the heading
     // nodes above it don't read as an extra management layer.

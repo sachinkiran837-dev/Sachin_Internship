@@ -3,8 +3,8 @@ import { UnsupportedFileError } from "./parseFile";
 import { readSourceFile } from "./readSource";
 import { bindFiles, type SourceFile } from "./bindFiles";
 import { buildOrgGraph } from "./buildGraph";
-import { planIngest, type IngestPlan } from "./plan";
-import { costCoverage, reconcileGroups } from "./reconcile";
+import { planIngest, type IngestPlan, type PriorRead } from "./plan";
+import { appliedMapping, costCoverage, reconcileGroups } from "./reconcile";
 import type { IngestNote } from "./notes";
 import type { IngestAnswers } from "./answers";
 import {
@@ -46,42 +46,97 @@ export interface IngestRequest {
    * is rebuilt.
    */
   orgId?: string;
+  /**
+   * What Atlas concluded on the previous read. Given to the planner so a
+   * correction written in prose is answered by a reader that can see what it
+   * is correcting.
+   */
+  prior?: PriorRead | null;
+}
+
+/**
+ * Folds the facts the planner read out of the client's own words into the
+ * answers already on file, and says whether anything actually changed.
+ *
+ * A structured answer the client typed into a box wins over the same fact
+ * inferred from a sentence — they filled in the field, which is a more direct
+ * statement than prose about it. Everything the planner adds beyond that is
+ * new information and is taken.
+ */
+function applyPlanAnswers(
+  current: IngestAnswers,
+  plan: IngestPlan | null
+): IngestAnswers | null {
+  if (!plan || plan.source !== "ai") return null;
+
+  const hoursPerWeek = current.hoursPerWeek ?? plan.answers.hoursPerWeek;
+
+  const valueMap: IngestAnswers["valueMap"] = { ...current.valueMap };
+  for (const [column, pairs] of Object.entries(plan.answers.valueMap)) {
+    valueMap[column] = { ...pairs, ...(valueMap[column] ?? {}) };
+  }
+
+  const changed =
+    hoursPerWeek !== current.hoursPerWeek ||
+    JSON.stringify(valueMap) !== JSON.stringify(current.valueMap);
+
+  return changed ? { ...current, hoursPerWeek, valueMap } : null;
 }
 
 export type IngestResult = { orgId: string } | { error: string };
 
 export async function runIngest(request: IngestRequest): Promise<IngestResult> {
-  const { incoming, failures, context, anonymize, answers } = request;
+  const { incoming, failures, context, anonymize, prior } = request;
 
-  const sources: SourceFile[] = failures.map((f) => ({ filename: f.filename, error: f.error }));
+  const read = async (answers: IngestAnswers): Promise<SourceFile[]> => {
+    const sources: SourceFile[] = failures.map((f) => ({ filename: f.filename, error: f.error }));
 
-  // Read every file, and record a failure as a property of that file rather
-  // than throwing. One unreadable file among several is not a reason to
-  // refuse the rest — and to a user, a refused batch is indistinguishable
-  // from multi-file upload simply not working.
-  for (const { filename, buffer } of incoming) {
-    try {
-      sources.push({ filename, parsed: await readSourceFile(filename, buffer, answers) });
-    } catch (err) {
-      sources.push({
-        filename,
-        error:
-          err instanceof UnsupportedFileError
-            ? err.message
-            : `Reading this file failed: ${(err as Error).message}`,
-      });
+    // Read every file, and record a failure as a property of that file rather
+    // than throwing. One unreadable file among several is not a reason to
+    // refuse the rest — and to a user, a refused batch is indistinguishable
+    // from multi-file upload simply not working.
+    for (const { filename, buffer } of incoming) {
+      try {
+        sources.push({ filename, parsed: await readSourceFile(filename, buffer, answers) });
+      } catch (err) {
+        sources.push({
+          filename,
+          error:
+            err instanceof UnsupportedFileError
+              ? err.message
+              : `Reading this file failed: ${(err as Error).message}`,
+        });
+      }
     }
-  }
+
+    return sources;
+  };
+
+  let answers = request.answers;
+  let sources = await read(answers);
 
   // Read the instructions *after* the files, because a plan can only be made
   // against what actually arrived: the planner is shown the real filenames,
   // the real columns and a few real rows, so it can say "the brand is the
-  // Entity column" rather than inventing a column name. It decides roles and
-  // meanings; every row operation below stays arithmetic.
+  // Entity column" rather than inventing a column name. When this run is a
+  // correction, it is also shown what Atlas concluded last time, so a remark
+  // like "the chart isn't the structure" has something to correct.
   const plan = await planIngest(
     context,
-    sources.filter((s) => s.parsed).map((s) => ({ filename: s.filename, parsed: s.parsed! }))
+    sources.filter((s) => s.parsed).map((s) => ({ filename: s.filename, parsed: s.parsed! })),
+    prior ?? null
   );
+
+  // A plan can carry facts the client stated in prose — "a full-time week is
+  // 38 hours", "AUH is AgeUp". Those change what a file *means*, not just how
+  // its files are bound, so the files have to be read again with them in
+  // hand. One extra parse, no extra request, and it is the difference between
+  // a correction that lands and one that is merely recorded.
+  const revised = applyPlanAnswers(answers, plan);
+  if (revised) {
+    answers = revised;
+    sources = await read(answers);
+  }
 
   // One file binds to itself, so this path is the same for one upload or ten.
   const bound = bindFiles(sources, plan, answers);
@@ -117,7 +172,7 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
     await saveSourceBlobs(orgId, incoming);
   }
 
-  const { positions, issues } = await buildOrgGraph(bound, {
+  const { positions, issues, notes: graphNotes } = await buildOrgGraph(bound, {
     orgId,
     anonymize,
     groupBy: bound.groupBy,
@@ -132,7 +187,9 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   // Everything Atlas assumed, and everything it refused to assume. The
   // vocabulary check runs last of all because it needs the files bound
   // together to see that two of them disagree.
-  const notes: IngestNote[] = [...(bound.notes ?? [])];
+  const notes: IngestNote[] = [...(bound.notes ?? []), ...graphNotes];
+  const merged = appliedMapping(bound, answers, revised !== null);
+  if (merged) notes.push(merged);
   const vocabulary = await reconcileGroups(bound, answers);
   if (vocabulary) notes.push(vocabulary);
   const coverage = costCoverage(positions);

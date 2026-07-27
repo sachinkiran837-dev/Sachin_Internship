@@ -1,13 +1,24 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getActiveScenario, getBaselinePositions, getBaselineRootId, getOrg } from "@/db/repo";
 import { computeMetrics } from "@/lib/metrics/diagnostics";
-import { generateFindings } from "@/lib/findings/generate";
+import { buildFindingsResult, generateNarrative } from "@/lib/findings/generate";
+import type { DiagnosticMetrics } from "@/lib/graph/types";
 import { OrgNav } from "@/components/OrgNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The findings are computed; only the paragraph that introduces them is
+ * drafted. So the page renders the findings straight away and lets the
+ * summary arrive after — which is also what stops this screen failing
+ * outright. Drafting the summary took seven seconds against a thousand
+ * positions, and a server-rendered page that spends seven seconds on its
+ * least important element will sooner or later hit the host's request
+ * ceiling and return nothing at all.
+ */
 export default async function FindingsPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const org = await getOrg(orgId);
@@ -18,32 +29,24 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
   const scenario = await getActiveScenario(orgId);
   const positions = scenario?.positions ?? baseline;
   const metrics = computeMetrics(positions, rootId);
-  const result = await generateFindings(metrics);
+  const result = buildFindingsResult(metrics);
 
   return (
     <div className="flex flex-1 flex-col">
       <OrgNav orgId={orgId} active="findings" />
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-8">
-        <div>
-          <h1 className="text-xl font-semibold">
-            Findings {scenario ? `— ${scenario.name}` : "— baseline"}
-          </h1>
-          {/* Provenance stays visible per the house rule, but stated as what
-              produced the wording rather than as an internal code path —
-              every figure below is computed either way. */}
-          <p className="mt-1 text-xs text-muted-foreground">
-            {result.source === "ai"
-              ? "Wording drafted by AI from figures computed here. Every number is calculated, not generated."
-              : "Written directly from the computed figures."}
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold">
+          Findings {scenario ? `— ${scenario.name}` : "— baseline"}
+        </h1>
 
         <Card>
           <CardHeader>
             <CardTitle>Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm leading-relaxed">{result.narrative}</p>
+            <Suspense fallback={<SummarySkeleton />}>
+              <Summary metrics={metrics} />
+            </Suspense>
           </CardContent>
         </Card>
 
@@ -83,6 +86,21 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
   );
 }
 
+async function Summary({ metrics }: { metrics: DiagnosticMetrics }) {
+  const { narrative } = await generateNarrative(metrics);
+  return <p className="text-sm leading-relaxed">{narrative}</p>;
+}
+
+function SummarySkeleton() {
+  return (
+    <div className="flex flex-col gap-2" aria-hidden>
+      <div className="h-3.5 w-full animate-pulse rounded bg-secondary" />
+      <div className="h-3.5 w-11/12 animate-pulse rounded bg-secondary" />
+      <div className="h-3.5 w-4/5 animate-pulse rounded bg-secondary" />
+    </div>
+  );
+}
+
 /**
  * Findings carry the metric keys they were derived from so the read stays
  * traceable. Those keys are internal identifiers, so they're named in
@@ -91,6 +109,8 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
 const EVIDENCE_LABELS: Record<string, string> = {
   protectedByTier: "protected and governance roles",
   headcount: "headcount",
+  totalFte: "contracted FTE",
+  contingentCount: "agency and contingent positions",
   totalCost: "fully-loaded cost",
   layers: "management layers",
   averageSpan: "average span of control",

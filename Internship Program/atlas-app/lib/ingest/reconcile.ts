@@ -72,9 +72,7 @@ export async function reconcileGroups(
       `"${primary.filename}" uses ${describe(primary.values)}. ` +
       `${unresolved.length} value${unresolved.length === 1 ? "" : "s"} covering ` +
       `${affected.toLocaleString()} people appear in one and not the other.` +
-      (proposal.source === "ai"
-        ? ""
-        : ` Atlas paired them by how the words themselves compare — no model was available to read them.`),
+      (proposal.source === "ai" ? "" : ` The pairing below compares the words themselves.`),
     effect:
       `Until these are paired the map shows up to ${primary.values.length + unresolved.length} ` +
       `${label.toLowerCase()} groups instead of ${primary.values.length}, and no ${label.toLowerCase()} ` +
@@ -199,6 +197,45 @@ function mostSimilar(value: string, candidates: string[]): string | null {
   }
 
   return best;
+}
+
+/**
+ * The pairings that were actually applied, stated back.
+ *
+ * Merging "365C" into "365 Care" removes a group from the map and moves
+ * everyone in it. Whether the client typed the pairing into a box or wrote it
+ * in a sentence, the result is the same and has to be as visible as the
+ * question it replaced — otherwise answering a question makes it vanish, and
+ * a reader coming to the screen later sees six brands with no record that
+ * there were ten.
+ */
+export function appliedMapping(
+  bound: BoundDataset,
+  answers: IngestAnswers,
+  /** True when the pairing was read out of the client's prose rather than typed. */
+  fromInstructions: boolean
+): IngestNote | null {
+  if (!bound.groupBy) return null;
+
+  const { label } = bound.groupBy;
+  const pairs = Object.entries(answers.valueMap[label] ?? {});
+  if (pairs.length === 0) return null;
+
+  return note("group-vocabulary-applied", "assumption", {
+    topic: `${label} names`,
+    statement:
+      `${pairs.length} ${label.toLowerCase()} value${pairs.length === 1 ? "" : "s"} from one file ` +
+      `${pairs.length === 1 ? "was" : "were"} read as naming the same thing as a value in another, and merged into one group.`,
+    evidence:
+      pairs.map(([from, to]) => `"${from}" was read as "${to}"`).join("; ") +
+      (fromInstructions
+        ? `. Atlas took that from what you wrote in your instructions rather than from anything in the files.`
+        : `. You confirmed these pairings on this screen.`),
+    effect:
+      `Everyone recorded under the left-hand value now sits under the right-hand group, and the ` +
+      `${label.toLowerCase()} totals cover both. Say so below if any pair should be kept apart.`,
+    answeredWith: fromInstructions ? "from your instructions" : "confirmed by you",
+  });
 }
 
 /**
