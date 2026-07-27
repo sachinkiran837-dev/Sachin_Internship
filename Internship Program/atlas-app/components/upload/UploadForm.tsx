@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState, useTransition } from "react";
 import { UploadCloud, FileSpreadsheet, FileImage, FileText, X } from "lucide-react";
 import { ingestFileAction, type IngestActionState } from "@/app/actions/ingest";
-import { MAX_UPLOAD_BYTES, SUPPORTED_FORMATS, formatFor } from "@/lib/ingest/formats";
+import { MAX_UPLOAD_BYTES, SUPPORTED_FORMATS, formatFor, readerLabel } from "@/lib/ingest/formats";
 import { uploadFileInChunks } from "@/lib/ingest/uploadClient";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -252,9 +252,9 @@ export function UploadForm() {
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
-                      {known?.kind === "visual" && (
+                      {readerLabel(f.name) && (
                         <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                          read by AI
+                          {readerLabel(f.name)}
                         </span>
                       )}
                       <span className="shrink-0 text-xs text-muted-foreground">
@@ -331,9 +331,11 @@ export function UploadForm() {
 
           <p className="text-xs text-muted-foreground">
             Spreadsheets, delimited text (delimiter auto-detected), JSON, XML, HTML and Word
-            tables are converted to the same shape deterministically. Images and PDFs are
-            transcribed by a vision model instead, so their rows are flagged for review on the
-            next screen — a chart read from a picture is a starting point, not a baseline.
+            tables are converted to the same shape deterministically. A PDF is read the same
+            way wherever it has a text layer — the characters and their positions are already
+            in the file. Only a scan, or a chart drawn as boxes and connectors, is transcribed
+            by a vision model, and those rows are flagged for review on the next screen: a
+            chart read from a picture is a starting point, not a baseline.
           </p>
         </div>
       )}

@@ -49,6 +49,18 @@ export function formatFor(filename: string): SupportedFormat | null {
   return SUPPORTED_FORMATS.find((f) => lower.endsWith(f.ext)) ?? null;
 }
 
+/**
+ * How a file will be read, for the upload list. PDFs are the hybrid: their
+ * text layer is read deterministically when they have one, and only a scan
+ * or a drawn chart falls through to the model — so labelling them "read by
+ * AI" outright would overstate it.
+ */
+export function readerLabel(filename: string): string | null {
+  const format = formatFor(filename);
+  if (!format || format.kind !== "visual") return null;
+  return format.ext === ".pdf" ? "text layer, else AI" : "read by AI";
+}
+
 export function extensionList(): string {
   return SUPPORTED_FORMATS.map((f) => f.ext).join(", ");
 }
