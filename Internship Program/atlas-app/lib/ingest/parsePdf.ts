@@ -1,5 +1,6 @@
 import { inflateSync } from "node:zlib";
 import type { ParsedFile } from "./parseFile";
+import { looksLikeChart, NotAChartError, parsePdfChart } from "./parsePdfChart";
 
 /**
  * Reads a table out of a PDF's own text layer — no model, no API key, and no
@@ -12,22 +13,44 @@ import type { ParsedFile } from "./parseFile";
  * runs into rows by their y position and columns by their x position. That is
  * arithmetic, not inference, which is why it is allowed to produce a baseline.
  *
- * What this deliberately will *not* do is reconstruct a drawn org chart —
- * boxes joined by connector lines — from its geometry. Deciding who reports
- * to whom by measuring which line touches which box is exactly the kind of
- * plausible-but-wrong import the house rule warns about, and a wrong
- * structure that looks right is worse than no structure. A PDF with no
- * readable table raises PdfNoTableError, and the caller decides whether to
- * hand it to the vision reader instead.
+ * A PDF that isn't a table may still be a *drawn* structure chart, which
+ * `parsePdfChart` handles from the same extracted geometry. That reading is
+ * inference rather than arithmetic — the reporting lines are worked out from
+ * which connector touches which box — so it is labelled for review, and this
+ * reader hands over to it only when the drawing itself says chart. When
+ * neither reading holds, PdfNoTableError is raised and the caller decides
+ * whether to hand the file to the vision reader instead.
  */
 
 /** Raised when the PDF holds no table the text layer can prove. */
 export class PdfNoTableError extends Error {}
 
-interface TextRun {
+export interface TextRun {
   x: number;
   y: number;
   text: string;
+}
+
+/** A drawn rectangle — in an org chart, a box around a role. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A drawn straight line — in an org chart, part of a reporting connector. */
+export interface Segment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface PdfContent {
+  runs: TextRun[];
+  rects: Rect[];
+  segments: Segment[];
 }
 
 /** y values within this many units are the same row; x within this, the same column. */
@@ -35,7 +58,8 @@ const ROW_TOLERANCE = 3;
 const COLUMN_TOLERANCE = 12;
 
 export function parsePdfFile(filename: string, buffer: Buffer): ParsedFile {
-  const runs = extractTextRuns(buffer);
+  const content = extractPdfContent(buffer);
+  const { runs } = content;
 
   if (runs.length === 0) {
     throw new PdfNoTableError(
@@ -43,13 +67,32 @@ export function parsePdfFile(filename: string, buffer: Buffer): ParsedFile {
     );
   }
 
+  // A drawn chart lays its boxes out in a grid, so its text lines up in rows
+  // and columns exactly as a table's does — the column detector will happily
+  // read a structure chart as a three-row table. Where the *drawing* says
+  // chart (connectors that resolve, or boxes holding several lines each),
+  // that evidence outranks the coincidence of alignment.
+  if (looksLikeChart(content)) {
+    try {
+      return parsePdfChart(filename, content);
+    } catch (err) {
+      if (!(err instanceof NotAChartError)) throw err;
+      // Fall through: it may still be a table after all.
+    }
+  }
+
   const lines = groupIntoLines(runs);
   const table = toTable(lines);
 
   if (!table) {
-    throw new PdfNoTableError(
-      `"${filename}" has text in it, but not laid out as a table with consistent columns — it is most likely a drawn org chart or a narrative document.`
-    );
+    try {
+      return parsePdfChart(filename, content);
+    } catch (err) {
+      if (!(err instanceof NotAChartError)) throw err;
+      throw new PdfNoTableError(
+        `"${filename}" has text in it, but Atlas could not read it as either a table or a structure chart. ${(err as Error).message}`
+      );
+    }
   }
 
   const { headers, rows } = table;
@@ -219,14 +262,18 @@ function buildFontMaps(objects: Map<number, PdfObject>): Map<string, CMap> {
 
 // --- content stream text extraction ---------------------------------------
 
-function extractTextRuns(buffer: Buffer): TextRun[] {
+export function extractPdfContent(buffer: Buffer): PdfContent {
   const raw = asBinaryString(buffer);
   const objects = readObjects(raw);
   const fonts = buildFontMaps(objects);
+
   const runs: TextRun[] = [];
+  const rects: Rect[] = [];
+  const segments: Segment[] = [];
 
   // Pages are stacked vertically so that runs from page 2 sort below page 1
-  // and the table reads in document order rather than interleaving.
+  // and the document reads in order rather than interleaving. Geometry is
+  // shifted by the same amount so boxes stay with their own text.
   let pageOffset = 0;
 
   for (const obj of objects.values()) {
@@ -237,12 +284,60 @@ function extractTextRuns(buffer: Buffer): TextRun[] {
     const pageRuns = readContentStream(content, fonts);
     if (pageRuns.length === 0) continue;
 
+    const graphics = readGraphics(content);
     const top = Math.max(...pageRuns.map((r) => r.y));
+
     for (const run of pageRuns) runs.push({ ...run, y: run.y - pageOffset });
+    for (const r of graphics.rects) rects.push({ ...r, y: r.y - pageOffset });
+    for (const s of graphics.segments) {
+      segments.push({ ...s, y1: s.y1 - pageOffset, y2: s.y2 - pageOffset });
+    }
+
     pageOffset += top + 1000;
   }
 
-  return runs;
+  return { runs, rects, segments };
+}
+
+/**
+ * Rectangles and straight line segments from a content stream's path
+ * operators — in an org chart, the boxes and the reporting connectors.
+ *
+ * Curves, clipping paths and nested coordinate transforms are ignored: a
+ * chart drawn with any of those loses accuracy rather than correctness,
+ * because the reader that consumes this refuses to guess when the geometry
+ * doesn't add up.
+ */
+function readGraphics(content: string): { rects: Rect[]; segments: Segment[] } {
+  const rects: Rect[] = [];
+  const segments: Segment[] = [];
+
+  for (const m of content.matchAll(/(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\b/g)) {
+    const width = Number(m[3]);
+    const height = Number(m[4]);
+    // A "rectangle" one unit thick is a rule or an underline, not a box.
+    if (Math.abs(width) < 2 || Math.abs(height) < 2) continue;
+    rects.push({
+      x: Math.min(Number(m[1]), Number(m[1]) + width),
+      y: Math.min(Number(m[2]), Number(m[2]) + height),
+      width: Math.abs(width),
+      height: Math.abs(height),
+    });
+  }
+
+  // Paths are sequences: `x y m` starts one, each `x y l` extends it.
+  let cursor: { x: number; y: number } | null = null;
+  for (const m of content.matchAll(/(-?[\d.]+)\s+(-?[\d.]+)\s+(m|l)\b/g)) {
+    const point = { x: Number(m[1]), y: Number(m[2]) };
+    if (m[3] === "m") {
+      cursor = point;
+    } else if (cursor) {
+      segments.push({ x1: cursor.x, y1: cursor.y, x2: point.x, y2: point.y });
+      cursor = point;
+    }
+  }
+
+  return { rects, segments };
 }
 
 function readContentStream(content: string, fonts: Map<string, CMap>): TextRun[] {
