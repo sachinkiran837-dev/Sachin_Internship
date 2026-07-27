@@ -1,3 +1,5 @@
+import ingestAssumptions from "@/config/ingest-assumptions.json";
+import { composeColumns } from "./composeColumns";
 import { formatFor, unsupportedMessage } from "./formats";
 import { parseDocxFile } from "./parseDocument";
 import { parseEstablishmentFile, UnsupportedFileError, type ParsedFile } from "./parseFile";
@@ -23,14 +25,27 @@ export async function readSourceFile(filename: string, buffer: Buffer): Promise<
     throw new UnsupportedFileError(`"${filename}" is empty.`);
   }
 
-  switch (format.kind) {
+  const parsed = await read(format.kind, format.ext, filename, buffer);
+
+  // Columns an establishment needs but a payroll export doesn't have — a
+  // whole name where the file holds a first and a last, an annual cost where
+  // it holds an hourly rate — are built here, once, so every reader benefits
+  // and nothing downstream has to know they were built.
+  return composeColumns(parsed, ingestAssumptions);
+}
+
+function read(
+  kind: string,
+  ext: string,
+  filename: string,
+  buffer: Buffer
+): Promise<ParsedFile> | ParsedFile {
+  switch (kind) {
     case "visual":
-      return format.ext === ".pdf"
-        ? readPdf(filename, buffer)
-        : parseVisualFile(filename, buffer);
+      return ext === ".pdf" ? readPdf(filename, buffer) : parseVisualFile(filename, buffer);
     case "document":
       return parseDocxFile(filename, buffer);
-    case "table":
+    default:
       return parseEstablishmentFile(filename, buffer);
   }
 }

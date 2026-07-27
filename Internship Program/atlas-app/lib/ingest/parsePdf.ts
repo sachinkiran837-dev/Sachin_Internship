@@ -29,6 +29,8 @@ export interface TextRun {
   x: number;
   y: number;
   text: string;
+  /** Which page of the document this came from, counting from zero. */
+  page: number;
 }
 
 /** A drawn rectangle — in an org chart, a box around a role. */
@@ -37,6 +39,7 @@ export interface Rect {
   y: number;
   width: number;
   height: number;
+  page: number;
 }
 
 /** A drawn straight line — in an org chart, part of a reporting connector. */
@@ -45,6 +48,7 @@ export interface Segment {
   y1: number;
   x2: number;
   y2: number;
+  page: number;
 }
 
 export interface PdfContent {
@@ -274,7 +278,11 @@ export function extractPdfContent(buffer: Buffer): PdfContent {
   // Pages are stacked vertically so that runs from page 2 sort below page 1
   // and the document reads in order rather than interleaving. Geometry is
   // shifted by the same amount so boxes stay with their own text.
+  // Which page something came from is not decoration. An org chart delivered
+  // as a slide deck is one sub-chart per page, and a box on page 4 does not
+  // report to whichever box happens to sit above it on page 3.
   let pageOffset = 0;
+  let page = 0;
 
   for (const obj of objects.values()) {
     if (!obj.stream) continue;
@@ -287,13 +295,14 @@ export function extractPdfContent(buffer: Buffer): PdfContent {
     const graphics = readGraphics(content);
     const top = Math.max(...pageRuns.map((r) => r.y));
 
-    for (const run of pageRuns) runs.push({ ...run, y: run.y - pageOffset });
-    for (const r of graphics.rects) rects.push({ ...r, y: r.y - pageOffset });
+    for (const run of pageRuns) runs.push({ ...run, y: run.y - pageOffset, page });
+    for (const r of graphics.rects) rects.push({ ...r, y: r.y - pageOffset, page });
     for (const s of graphics.segments) {
-      segments.push({ ...s, y1: s.y1 - pageOffset, y2: s.y2 - pageOffset });
+      segments.push({ ...s, y1: s.y1 - pageOffset, y2: s.y2 - pageOffset, page });
     }
 
     pageOffset += top + 1000;
+    page++;
   }
 
   return { runs, rects, segments };
@@ -308,9 +317,12 @@ export function extractPdfContent(buffer: Buffer): PdfContent {
  * because the reader that consumes this refuses to guess when the geometry
  * doesn't add up.
  */
-function readGraphics(content: string): { rects: Rect[]; segments: Segment[] } {
-  const rects: Rect[] = [];
-  const segments: Segment[] = [];
+function readGraphics(content: string): {
+  rects: Omit<Rect, "page">[];
+  segments: Omit<Segment, "page">[];
+} {
+  const rects: Omit<Rect, "page">[] = [];
+  const segments: Omit<Segment, "page">[] = [];
 
   for (const m of content.matchAll(/(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\b/g)) {
     const width = Number(m[3]);
@@ -340,8 +352,8 @@ function readGraphics(content: string): { rects: Rect[]; segments: Segment[] } {
   return { rects, segments };
 }
 
-function readContentStream(content: string, fonts: Map<string, CMap>): TextRun[] {
-  const runs: TextRun[] = [];
+function readContentStream(content: string, fonts: Map<string, CMap>): Omit<TextRun, "page">[] {
+  const runs: Omit<TextRun, "page">[] = [];
 
   let x = 0;
   let y = 0;

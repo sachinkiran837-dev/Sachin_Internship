@@ -66,11 +66,26 @@ function normalize(header: string): string {
 }
 
 export function mapColumns(headers: string[]): ColumnMapping[] {
-  const used = new Set<string>();
+  const candidates = headers.map((sourceColumn) => ({
+    sourceColumn,
+    ...bestMatch(normalize(sourceColumn)),
+  }));
 
-  return headers.map((sourceColumn) => {
-    const { field, score } = bestMatch(normalize(sourceColumn));
+  // Each field goes to the column that resembles it most, not to whichever
+  // column happened to be listed first. A file with "FirstName", "Surname"
+  // and a composed "Employee Name" has three columns wanting the name field;
+  // by position the weakest of the three wins and everyone in the
+  // establishment is called "Melanie".
+  const winner = new Map<string, string>();
+  for (const c of candidates) {
+    if (c.field === null) continue;
+    const held = candidates.find((o) => o.sourceColumn === winner.get(c.field!));
+    // Ties go to the earlier column, so a file with one obvious match per
+    // field maps exactly as it always did.
+    if (!held || c.score > held.score) winner.set(c.field, c.sourceColumn);
+  }
 
+  return candidates.map(({ sourceColumn, field, score }) => {
     // A column maps to the field it most resembles, or to nothing. It is
     // never handed to its *second* choice because the first was taken: an
     // establishment with both "Department" and "Cost Centre" would otherwise
@@ -78,8 +93,7 @@ export function mapColumns(headers: string[]): ColumnMapping[] {
     // and quietly become everyone's salary — after which the real payroll
     // figures arrive, disagree, and are discarded as conflicts. An unmapped
     // extra column is recoverable; a poisoned cost field is not.
-    const claimed = field !== null && !used.has(field);
-    if (claimed) used.add(field);
+    const claimed = field !== null && winner.get(field) === sourceColumn;
 
     return {
       sourceColumn,

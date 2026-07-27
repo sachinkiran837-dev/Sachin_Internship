@@ -1,0 +1,8 @@
+{
+  "_note": "Assumptions Atlas needs to turn what a payroll system exports into what an org map needs. These are not read from any file — they are stated here so a client can argue with them, and every screen that shows a figure derived from them names them. Changing a number here changes every cost that depends on it.",
+  "fullTimeHoursPerWeek": 38,
+  "fullTimeHoursNote": "Hours a 1.0 FTE is paid for in a week, used to annualise an hourly rate. 38 is the Australian full-time standard under the National Employment Standards.",
+  "casualHoursPerWeek": 20,
+  "casualHoursNote": "Hours a week assumed for staff paid hourly whose FTE is recorded as 0 — casuals with no guaranteed hours. Zero would price them at nothing and understate the establishment by hundreds of people; full-time would overstate it by as much. This is the single most arguable number in the file: replace it with the client's actual average paid hours as soon as they can supply them.",
+  "weeksPerYear": 52
+}
