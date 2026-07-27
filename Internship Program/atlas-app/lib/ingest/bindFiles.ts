@@ -51,8 +51,18 @@ export interface BoundDataset extends ParsedFile {
 
 export interface SourceFile {
   filename: string;
-  parsed: ParsedFile;
+  parsed?: ParsedFile;
+  /**
+   * Why this file couldn't be read at all. A file that fails is reported
+   * alongside the ones that worked rather than aborting the upload — one
+   * unreadable file among five is not a reason to refuse the other four,
+   * and refusing the batch is indistinguishable to the user from the whole
+   * feature being broken.
+   */
+  error?: string;
 }
+
+type ReadableFile = SourceFile & { parsed: ParsedFile };
 
 type CanonicalField = keyof typeof CANONICAL_FIELDS;
 
@@ -84,7 +94,7 @@ const key = (v: string) => v.trim().toLowerCase();
  * Unmapped columns keep their original header — they may be exactly the
  * client-specific field someone wants to see later.
  */
-function normalise(file: SourceFile): NormalisedFile {
+function normalise(file: ReadableFile): NormalisedFile {
   const mapping = mapColumns(file.parsed.headers);
   const fields = new Set<CanonicalField>();
   const extras: string[] = [];
@@ -136,8 +146,40 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
     throw new Error("No files to bind.");
   }
 
-  const normalised = files.map(normalise);
+  const readable = files.filter((f): f is ReadableFile => Boolean(f.parsed));
   const bindings: FileBinding[] = [];
+
+  // Files that couldn't be read at all are reported first, in upload order,
+  // so the reader sees them next to the ones that worked.
+  for (const f of files) {
+    if (f.parsed) continue;
+    bindings.push({
+      filename: f.filename,
+      role: "unusable",
+      rowCount: 0,
+      joinKey: null,
+      matchedRows: 0,
+      unmatchedRows: 0,
+      contributedFields: [],
+      conflicts: 0,
+      detail: `Not used. ${f.error ?? "Atlas could not read this file."}`,
+    });
+  }
+
+  if (readable.length === 0) {
+    return {
+      headers: [],
+      rows: [],
+      bindings,
+      conversion: {
+        sourceFormat: "—",
+        detail: `None of the ${files.length} uploaded file${files.length === 1 ? "" : "s"} could be read.`,
+        rowCount: 0,
+      },
+    };
+  }
+
+  const normalised = readable.map(normalise);
 
   let rosters = normalised.filter(isRoster);
   const others = normalised.filter((f) => !isRoster(f));
@@ -301,11 +343,19 @@ export function bindFiles(files: SourceFile[]): BoundDataset {
     return out;
   });
 
+  // Report the files back in the order they were uploaded, not in the order
+  // the binder happened to process them — the reader is looking for the file
+  // they just added, not for its role.
+  const uploadOrder = new Map(files.map((f, i) => [f.filename, i] as const));
+  bindings.sort(
+    (a, b) => (uploadOrder.get(a.filename) ?? 0) - (uploadOrder.get(b.filename) ?? 0)
+  );
+
   return {
     headers,
     rows,
     bindings,
-    conversion: summarise(files, bindings, rows.length),
+    conversion: summarise(readable, files.length, bindings, rows.length),
   };
 }
 
@@ -314,23 +364,24 @@ function fieldLabel(field: string): string {
 }
 
 function summarise(
-  files: SourceFile[],
+  readable: ReadableFile[],
+  totalFiles: number,
   bindings: FileBinding[],
   rowCount: number
 ): ConversionReport {
-  const formats = [...new Set(files.map((f) => f.parsed.conversion.sourceFormat))];
+  const formats = [...new Set(readable.map((f) => f.parsed.conversion.sourceFormat))];
   const rosters = bindings.filter((b) => b.role === "roster").length;
   const joined = bindings.filter((b) => b.role === "attributes").length;
   const unusable = bindings.filter((b) => b.role === "unusable").length;
 
-  if (files.length === 1) {
-    return { ...files[0].parsed.conversion, rowCount };
+  if (totalFiles === 1) {
+    return { ...readable[0].parsed.conversion, rowCount };
   }
 
   return {
     sourceFormat: formats.join(" + "),
     detail:
-      `Bound ${files.length} files into one establishment: ` +
+      `Bound ${totalFiles} files into one establishment: ` +
       `${rosters} position list${rosters === 1 ? "" : "s"}` +
       (joined > 0 ? `, ${joined} joined for extra detail` : "") +
       (unusable > 0 ? `, ${unusable} not usable` : "") +

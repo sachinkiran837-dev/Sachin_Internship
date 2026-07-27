@@ -36,6 +36,10 @@ export default async function OrgConfirmPage({
   const lowConfidence = issues.filter((i) => i.kind === "low_confidence");
   // A conversion note isn't something to review — it's a record of what
   // Atlas did to the file, so it doesn't count toward "no ingest issues".
+  // A file Atlas *couldn't* use is the exception: it's left unresolved
+  // precisely because it's a gap, and claiming a clean ingest alongside a
+  // refused file would be the app contradicting itself on one screen.
+  const unusedFiles = conversions.filter((i) => !i.resolved);
   const reviewable = issues.filter((i) => i.kind !== "conversion");
 
   return (
@@ -91,10 +95,11 @@ export default async function OrgConfirmPage({
           </div>
         )}
 
-        {reviewable.length === 0 ? (
+        {reviewable.length === 0 && unusedFiles.length === 0 ? (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              No ingest issues — every row mapped cleanly and every reporting line resolved.
+              No ingest issues — every file was used, every row mapped cleanly and every reporting
+              line resolved.
             </CardContent>
           </Card>
         ) : (
@@ -103,6 +108,13 @@ export default async function OrgConfirmPage({
               <CardTitle>Confirm before treating this as the baseline</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm">
+              {unusedFiles.length > 0 && (
+                <IssueGroup
+                  title="Files that contributed nothing"
+                  tone="destructive"
+                  items={unusedFiles}
+                />
+              )}
               {unmapped.length > 0 && (
                 <IssueGroup title="Unmapped columns" tone="destructive" items={unmapped} />
               )}

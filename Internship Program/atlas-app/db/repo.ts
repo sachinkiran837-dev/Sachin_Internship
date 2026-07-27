@@ -4,6 +4,25 @@ import { db } from "./client";
 import { auditLog, ingestIssues, orgs, positions, scenarios } from "./schema";
 import type { IngestIssue, Position, Move, AuditEntry } from "@/lib/graph/types";
 
+/**
+ * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
+ * per query, so inserting an establishment a row at a time costs one round
+ * trip per position — at a few thousand positions that is not slow, it is a
+ * request that never returns, and the upload appears to hang. Batching turns
+ * a real client-sized establishment into a handful of round trips.
+ *
+ * 500 keeps each statement comfortably inside Postgres's 65535-parameter
+ * ceiling (the widest table here is 14 columns) without building a statement
+ * so large it becomes its own problem.
+ */
+const INSERT_BATCH = 500;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 function toPosition(row: typeof positions.$inferSelect): Position {
   return {
     id: row.id,
@@ -57,14 +76,15 @@ export async function savePositions(rows: Position[]): Promise<void> {
     confidenceJson: JSON.stringify(p.confidence),
     classificationSource: p.classificationSource,
   }));
-  for (const row of insertRows) {
-    await db.insert(positions).values(row);
+  for (const batch of chunk(insertRows, INSERT_BATCH)) {
+    await db.insert(positions).values(batch);
   }
 }
 
 export async function saveIssues(issues: IngestIssue[]): Promise<void> {
-  for (const issue of issues) {
-    await db.insert(ingestIssues).values(issue);
+  if (issues.length === 0) return;
+  for (const batch of chunk(issues, INSERT_BATCH)) {
+    await db.insert(ingestIssues).values(batch);
   }
 }
 

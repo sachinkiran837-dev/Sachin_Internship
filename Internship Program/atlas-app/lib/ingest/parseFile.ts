@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { formatFor, unsupportedMessage } from "./formats";
 
 export interface ParsedFile {
   headers: string[];
@@ -11,28 +12,16 @@ export interface ConversionReport {
   sourceFormat: string;
   detail: string;
   rowCount: number;
+  /**
+   * Set only when a model produced the rows rather than reading someone
+   * else's export (an org chart transcribed from an image). Raised on the
+   * confirm screen as a low-confidence issue — these rows are a starting
+   * point, not a baseline.
+   */
+  needsReview?: string;
 }
 
 export class UnsupportedFileError extends Error {}
-
-/**
- * Everything Atlas can normalise into the one tabular shape the rest of the
- * pipeline reads. Ordered by how they're detected, not alphabetically.
- */
-export const SUPPORTED_FORMATS = [
-  { ext: ".csv", label: "CSV" },
-  { ext: ".tsv", label: "Tab-separated" },
-  { ext: ".txt", label: "Delimited text" },
-  { ext: ".psv", label: "Pipe-separated" },
-  { ext: ".xlsx", label: "Excel" },
-  { ext: ".xlsm", label: "Excel (macro)" },
-  { ext: ".xls", label: "Excel (legacy)" },
-  { ext: ".ods", label: "OpenDocument" },
-  { ext: ".json", label: "JSON" },
-  { ext: ".xml", label: "XML" },
-  { ext: ".html", label: "HTML table" },
-  { ext: ".htm", label: "HTML table" },
-] as const;
 
 // Everything not listed here (.xlsx/.xlsm/.xls/.ods/.html/.htm) is handed to
 // the workbook reader, which is the correct fallback for any spreadsheet
@@ -40,22 +29,31 @@ export const SUPPORTED_FORMATS = [
 const DELIMITED_EXTENSIONS: string[] = [".csv", ".tsv", ".txt", ".psv"];
 
 /**
- * Parses any supported establishment export into headers + rows — the CSV
- * shape the column mapper and graph builder expect. Every branch either
- * produces a real table or throws: an empty sheet, a header-only file, a
- * JSON blob with no array of records, or an unrecognised extension all
- * fail loudly rather than importing a partial result.
+ * Parses any supported *tabular* establishment export into headers + rows —
+ * the CSV shape the column mapper and graph builder expect. Every branch
+ * either produces a real table or throws: an empty sheet, a header-only file,
+ * a JSON blob with no array of records, or an unrecognised extension all fail
+ * loudly rather than importing a partial result.
+ *
+ * Word documents, images and PDFs go through `readSourceFile` instead, which
+ * routes to the readers that need to be asynchronous.
  */
 export function parseEstablishmentFile(filename: string, buffer: Buffer): ParsedFile {
-  const lower = filename.toLowerCase();
-  const ext = SUPPORTED_FORMATS.map((f) => f.ext).find((e) => lower.endsWith(e));
+  const format = formatFor(filename);
 
-  if (!ext) {
-    throw new UnsupportedFileError(
-      `Atlas can't read "${filename}". Supported formats: ${SUPPORTED_FORMATS.map((f) => f.ext).join(", ")}. ` +
-        `Export the establishment from your HR system as CSV or Excel and try again.`
+  if (!format) {
+    throw new UnsupportedFileError(unsupportedMessage(filename));
+  }
+
+  if (format.kind !== "table") {
+    // A caller mistake rather than a bad upload: this reader is synchronous
+    // and the other formats can't be.
+    throw new Error(
+      `"${filename}" is a ${format.label} file — read it with readSourceFile(), not parseEstablishmentFile().`
     );
   }
+
+  const ext = format.ext;
 
   if (ext === ".json") return finalise(parseJson(filename, buffer), filename);
   if (ext === ".xml") return finalise(parseXml(filename, buffer), filename);
@@ -381,7 +379,7 @@ function stripBom(s: string): string {
 }
 
 function formatLabel(ext: string): string {
-  return SUPPORTED_FORMATS.find((f) => f.ext === ext)?.label ?? ext;
+  return formatFor(ext)?.label ?? ext;
 }
 
 /** Round-trips a normalised table back to CSV text for download / audit. */

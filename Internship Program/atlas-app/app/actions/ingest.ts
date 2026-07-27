@@ -4,11 +4,9 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redirect } from "next/navigation";
-import {
-  parseEstablishmentFile,
-  SUPPORTED_FORMATS,
-  UnsupportedFileError,
-} from "@/lib/ingest/parseFile";
+import { UnsupportedFileError } from "@/lib/ingest/parseFile";
+import { SUPPORTED_FORMATS } from "@/lib/ingest/formats";
+import { readSourceFile } from "@/lib/ingest/readSource";
 import { bindFiles, type SourceFile } from "@/lib/ingest/bindFiles";
 import { buildOrgGraph } from "@/lib/ingest/buildGraph";
 import { createOrg, saveIssues, savePositions } from "@/db/repo";
@@ -34,11 +32,26 @@ export async function ingestFileAction(
 
     if (useSample || uploaded.length === 0) {
       const buffer = await readFile(path.join(process.cwd(), "db", "seed-data", SAMPLE_FILE));
-      sources.push({ filename: SAMPLE_FILE, parsed: parseEstablishmentFile(SAMPLE_FILE, buffer) });
+      sources.push({ filename: SAMPLE_FILE, parsed: await readSourceFile(SAMPLE_FILE, buffer) });
     } else {
+      // Read every file, and record a failure as a property of that file
+      // rather than throwing. One unreadable file among several is not a
+      // reason to refuse the rest — and to a user, a refused batch is
+      // indistinguishable from multi-file upload simply not working.
       for (const file of uploaded) {
         const buffer = Buffer.from(await file.arrayBuffer());
-        sources.push({ filename: file.name, parsed: parseEstablishmentFile(file.name, buffer) });
+        try {
+          sources.push({ filename: file.name, parsed: await readSourceFile(file.name, buffer) });
+        } catch (err) {
+          if (err instanceof UnsupportedFileError) {
+            sources.push({ filename: file.name, error: err.message });
+          } else {
+            sources.push({
+              filename: file.name,
+              error: `Reading this file failed: ${(err as Error).message}`,
+            });
+          }
+        }
       }
     }
 
@@ -47,9 +60,17 @@ export async function ingestFileAction(
     const bound = bindFiles(sources);
 
     if (bound.rows.length === 0) {
+      // Every reason, not just the first — if four files failed for four
+      // different reasons, one error message naming one of them sends the
+      // user round the loop three more times.
+      const reasons = sources.filter((s) => s.error).map((s) => `${s.filename} — ${s.error}`);
+
       return {
         error:
-          "None of those files could be read as a list of positions. Atlas needs at least one file with a role or job title in it, plus a position ID, name or manager to identify each row.",
+          (reasons.length > 0
+            ? `${reasons.join("\n\n")}\n\n`
+            : "") +
+          "Atlas needs at least one file with a role or job title in it, plus a position ID, name or manager to identify each row.",
       };
     }
 
@@ -76,7 +97,10 @@ export async function ingestFileAction(
         } and ${bound.headers.length} column${bound.headers.length === 1 ? "" : "s"} in the combined establishment.`,
         resolved: true,
       },
-      ...(sources.length > 1
+      // Per-file lines whenever there is more than one file, and always when
+      // a file was rejected — a single refused file must never be silent
+      // just because it was the only one.
+      ...(sources.length > 1 || sources.some((s) => s.error)
         ? bound.bindings.map((b) => ({
             id: randomUUID(),
             orgId,
@@ -90,7 +114,21 @@ export async function ingestFileAction(
         : []),
     ];
 
-    await saveIssues([...conversionIssues, ...issues]);
+    // Rows a model transcribed from a picture are the one kind of ingest that
+    // isn't a reading of someone else's export, so they land in the same
+    // low-confidence queue as an unresolved reporting line.
+    const reviewIssues = sources
+      .filter((s) => s.parsed?.conversion.needsReview)
+      .map((s) => ({
+        id: randomUUID(),
+        orgId,
+        kind: "low_confidence" as const,
+        positionId: null,
+        detail: s.parsed!.conversion.needsReview!,
+        resolved: false,
+      }));
+
+    await saveIssues([...conversionIssues, ...reviewIssues, ...issues]);
 
     redirect(`/org/${orgId}`);
   } catch (err) {
@@ -105,9 +143,11 @@ export async function ingestFileAction(
   }
 }
 
+/** Named after the first file that actually contributed, not the first uploaded. */
 function orgNameFor(sources: SourceFile[]): string {
-  const first = stripExtension(sources[0].filename);
-  return sources.length === 1 ? first : `${first} + ${sources.length - 1} more`;
+  const used = sources.filter((s) => s.parsed);
+  const first = stripExtension((used[0] ?? sources[0]).filename);
+  return used.length <= 1 ? first : `${first} + ${used.length - 1} more`;
 }
 
 function stripExtension(filename: string): string {

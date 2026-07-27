@@ -127,6 +127,51 @@ async function main() {
   }
   for (const n of bindingNotes) console.log(`   · ${n.detail}`);
 
+  // --- a batch containing a file that can't be read ---------------------
+  // The rest of the upload must still land. Refusing the whole batch over
+  // one bad file is indistinguishable, to the person uploading, from
+  // multi-file upload not working at all.
+  const mixed = new FormData();
+  mixed.append(
+    "file",
+    csvFile(
+      "establishment.csv",
+      rows.slice(0, 40).map((r) => ({
+        "Position ID": r["Position ID"],
+        "Employee Name": r["Employee Name"],
+        "Position Title": r["Position Title"],
+        Department: r["Department"],
+        "Manager ID": r["Manager ID"],
+        "Fully Loaded Cost": r["Fully Loaded Cost"],
+      }))
+    )
+  );
+  mixed.append("file", new File(["not a spreadsheet"], "handbook.rtf", { type: "text/rtf" }));
+  mixed.set("anonymize", "on");
+  mixed.set("useSample", "off");
+
+  const beforeMixed = (await listOrgs()).length;
+  await runAction(mixed);
+
+  orgs = await listOrgs();
+  if (orgs.length !== beforeMixed + 1) {
+    throw new Error("a batch with one unreadable file should still produce an establishment");
+  }
+
+  const mixedOrg = orgs[orgs.length - 1];
+  const mixedPositions = await getBaselinePositions(mixedOrg.id);
+  if (mixedPositions.length !== 40) {
+    throw new Error(`expected the readable file's 40 rows, got ${mixedPositions.length}`);
+  }
+
+  const mixedNotes = (await getIssues(mixedOrg.id)).filter((i) => i.kind === "conversion");
+  const refusal = mixedNotes.find((n) => n.detail.startsWith("handbook.rtf"));
+  if (!refusal) throw new Error("the unreadable file was dropped without being reported");
+  if (refusal.resolved) throw new Error("an unusable file must stay flagged for review");
+
+  console.log(`3. good + unreadable → org "${mixedOrg.name}", ${mixedPositions.length} positions kept`);
+  console.log(`   · ${refusal.detail.slice(0, 120)}…`);
+
   console.log("PASSED");
 }
 
