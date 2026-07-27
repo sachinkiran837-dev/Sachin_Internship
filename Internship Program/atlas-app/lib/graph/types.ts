@@ -19,7 +19,12 @@ export interface Position {
   classificationSource: "ai" | "fallback";
 }
 
-export type IssueKind = "orphan" | "duplicate" | "low_confidence" | "unmapped_column";
+export type IssueKind =
+  | "orphan"
+  | "duplicate"
+  | "low_confidence"
+  | "unmapped_column"
+  | "conversion";
 
 export interface IngestIssue {
   id: string;
@@ -100,6 +105,8 @@ export type MoveKind =
   | "add"
   | "merge"
   | "flatten"
+  | "rebase"
+  | "play"
   | "unrecognized";
 
 export interface Move {

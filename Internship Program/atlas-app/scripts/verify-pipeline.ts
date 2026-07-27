@@ -2,8 +2,14 @@
  * Standalone end-to-end verification of the Atlas pipeline against the real
  * database — not a page click-through, but exercises every skill's actual
  * logic module with real data: ingest -> map/metrics -> scenario mutation
- * (guardrails + audit) -> findings. Run with `npx tsx scripts/verify-pipeline.ts`.
+ * (guardrails + audit) -> findings. Run with
+ * `npx tsx --env-file=.env.local scripts/verify-pipeline.ts`.
+ *
+ * Ids are generated per run rather than hard-coded: the database is now a
+ * persistent Postgres, so a fixed key would collide with the previous run
+ * and the script has to stay re-runnable.
  */
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -107,9 +113,9 @@ async function main() {
   assert(!dragOutcome.blocked, `expected drag reassign to succeed, blocked: ${dragOutcome.blockReason}`);
   await saveScenarioState(scenario.id, dragOutcome.positions, [
     ...scenario.moves,
-    { id: "move-1", kind: "reassign", raw: dragOutcome.description, description: dragOutcome.description, blocked: false, appliedAt: new Date().toISOString() },
+    { id: randomUUID(), kind: "reassign", raw: dragOutcome.description, description: dragOutcome.description, blocked: false, appliedAt: new Date().toISOString() },
   ]);
-  await appendAuditEntry({ id: "audit-1", scenarioId: scenario.id, positionId: analyst1.id, action: "mutation", detail: dragOutcome.description, who: "verify-script", when: new Date().toISOString() });
+  await appendAuditEntry({ id: randomUUID(), scenarioId: scenario.id, positionId: analyst1.id, action: "mutation", detail: dragOutcome.description, who: "verify-script", when: new Date().toISOString() });
   console.log(`   ${dragOutcome.description}`);
 
   console.log("7. Typed scenario move (C5): flatten Clinical Operations to 4 layers...");
@@ -126,7 +132,7 @@ async function main() {
   assert(postFlattenMetrics.headcount < preFlattenMetrics.headcount, "flatten should reduce headcount by delayering");
   await saveScenarioState(scenario.id, flattenOutcome.positions, [
     ...afterDrag!.moves,
-    { id: "move-2", kind: "flatten", raw: "flatten Clinical Operations to 4 layers", description: flattenOutcome.description, blocked: false, appliedAt: new Date().toISOString() },
+    { id: randomUUID(), kind: "flatten", raw: "flatten Clinical Operations to 4 layers", description: flattenOutcome.description, blocked: false, appliedAt: new Date().toISOString() },
   ]);
   console.log(`   ${flattenOutcome.description}`);
   console.log(`   headcount ${preFlattenMetrics.headcount} -> ${postFlattenMetrics.headcount}, layers ${preFlattenMetrics.layers} -> ${postFlattenMetrics.layers}`);

@@ -7,8 +7,8 @@ import type { ColumnMapping } from "@/lib/graph/types";
  * unmapped column rather than silently dropped.
  */
 const SYNONYMS = {
-  name: ["name", "employee name", "full name", "worker", "employee"],
-  title: ["title", "position title", "job title", "role", "position"],
+  name: ["name", "employee name", "full name", "worker", "employee", "person", "incumbent"],
+  title: ["title", "position title", "job title", "role", "position", "job", "designation"],
   department: [
     "department",
     "division",
@@ -17,6 +17,8 @@ const SYNONYMS = {
     "cost centre",
     "cost center",
     "team",
+    "directorate",
+    "service",
   ],
   managerName: [
     "manager",
@@ -25,15 +27,42 @@ const SYNONYMS = {
     "supervisor",
     "manager id",
     "reporting manager",
+    "line manager",
+    "parent",
+    "reports to id",
+    "supervisor id",
   ],
-  positionId: ["position id", "id", "employee id", "position number", "role id"],
-  cost: ["cost", "salary", "fully loaded cost", "annual cost", "compensation", "flc"],
+  positionId: ["position id", "id", "employee id", "position number", "role id", "staff id"],
+  cost: [
+    "cost",
+    "salary",
+    "fully loaded cost",
+    "annual cost",
+    "compensation",
+    "flc",
+    "remuneration",
+    "package",
+  ],
   fte: ["fte", "full time equivalent"],
-  status: ["status", "position status", "employment status"],
+  status: ["status", "position status", "employment status", "employment type"],
 } satisfies Record<string, string[]>;
 
+/**
+ * Headers arrive in whatever shape the source used. A CSV gives
+ * "Manager ID"; the same field out of a JSON API is "reportsTo", and out of
+ * a nested payload it's "manager.id" — all three have to land on the same
+ * canonical field, so casing, separators and dotted paths are flattened to
+ * one spaced lower-case form before matching.
+ */
 function normalize(header: string): string {
-  return header.trim().toLowerCase().replace(/[_\-]+/g, " ").replace(/\s+/g, " ");
+  return header
+    .trim()
+    // Split camelCase / PascalCase into words: reportsTo -> reports To.
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[_\-.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function mapColumns(headers: string[]): ColumnMapping[] {

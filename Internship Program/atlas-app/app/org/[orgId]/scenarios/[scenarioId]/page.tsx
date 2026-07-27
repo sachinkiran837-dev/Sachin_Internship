@@ -8,7 +8,9 @@ import {
 } from "@/db/repo";
 import { computeDelta, computeMetrics } from "@/lib/metrics/diagnostics";
 import { findSafeStaffingBreaches } from "@/lib/scenario/compare";
+import { analyseAllPlays } from "@/lib/scenario/plays";
 import { OrgNav } from "@/components/OrgNav";
+import { PlayCard } from "@/components/scenario/PlayCard";
 import { ScenarioMoveForm } from "@/components/scenario/ScenarioMoveForm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +38,13 @@ export default async function ScenarioDetailPage({
   const breaches = findSafeStaffingBreaches(baseline, scenario.positions);
   const delta = computeDelta(baselineMetrics, scenarioMetrics, breaches);
   const auditLog = await listAuditLog(scenarioId);
+
+  // Re-analysed against this scenario's current state, not the baseline —
+  // what's still available once these moves have landed.
+  const remainingPlays = analyseAllPlays(
+    scenario.positions,
+    getBaselineRootId(scenario.positions) ?? rootId
+  ).filter((p) => p.analysis.candidates.length > 0);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -80,9 +89,42 @@ export default async function ScenarioDetailPage({
           </CardContent>
         </Card>
 
+        <section>
+          <p className="eyebrow mb-3">
+            <span className="eyebrow-dot" aria-hidden />
+            Go further
+          </p>
+          <h2 className="text-xl">
+            {remainingPlays.length > 0
+              ? `${remainingPlays.length} play${remainingPlays.length === 1 ? "" : "s"} still available on this structure`
+              : "No further plays available on this structure"}
+          </h2>
+          <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">
+            {remainingPlays.length > 0
+              ? "Re-analysed against this scenario as it now stands, not the original baseline — so the savings shown are what remains on top of the moves already applied. Layering a play adds its changes to this scenario."
+              : "Every play has either been applied here or has nothing left to act on in this structure."}
+          </p>
+
+          {remainingPlays.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3">
+              {remainingPlays
+                .sort((a, b) => b.analysis.projectedSaving - a.analysis.projectedSaving)
+                .map(({ play, analysis }) => (
+                  <PlayCard
+                    key={play.id}
+                    orgId={orgId}
+                    play={play}
+                    analysis={analysis}
+                    layerOntoScenarioId={scenarioId}
+                  />
+                ))}
+            </div>
+          )}
+        </section>
+
         <Card>
           <CardHeader>
-            <CardTitle>Model a move</CardTitle>
+            <CardTitle>Model a specific move</CardTitle>
           </CardHeader>
           <CardContent>
             <ScenarioMoveForm orgId={orgId} scenarioId={scenarioId} />

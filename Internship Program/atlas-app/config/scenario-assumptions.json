@@ -1,0 +1,12 @@
+{
+  "_note": "Every rate a scenario play uses to convert structure into dollars lives here, not inline in code — a client will ask 'where did that number come from', and the answer has to be a file they can read and change. Each play states which of these it used in its method line.",
+  "agencyPremiumFallbackRate": 0.18,
+  "agencyPremiumFallbackNote": "Used only when the org has no permanent equivalent of an agency role to benchmark against. When one exists, the org's own observed permanent cost is used instead and this rate is ignored.",
+  "outsourcingMarginRate": 0.12,
+  "outsourcingMinClusterSize": 3,
+  "outsourcingMarginNote": "Vendor margin released by bringing a service in-house. Only applied to clusters at or above the minimum size — below it, in-housing does not pay for its own supervision.",
+  "replacementManagerCost": null,
+  "replacementManagerCostNote": "Cost of the team-lead hire avoided when a wide span is redistributed instead of split. Null means derive it from the org's own median manager cost rather than assuming a market rate.",
+  "vacancyRealisationRate": 1.0,
+  "vacancyRealisationNote": "Share of a closed vacancy's budgeted cost treated as recoverable. 1.0 assumes the line is fully released; lower it if vacancies are partly covered by overtime that would persist."
+}

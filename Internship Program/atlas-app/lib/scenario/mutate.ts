@@ -11,8 +11,9 @@ import {
   getScenario,
   saveScenarioState,
 } from "@/db/repo";
-import { add, flatten, merge, reassign, remove, type MoveOutcome } from "./moves";
+import { add, flatten, merge, reassign, rebase, remove, type MoveOutcome } from "./moves";
 import { parseScenarioText } from "./moveParser";
+import { analysePlay, getPlay } from "./plays";
 
 const DEFAULT_WHO = "Project Partner (local session)";
 
@@ -177,6 +178,95 @@ export async function submitScenarioMove(
     },
     parsed.kind
   );
+}
+
+/**
+ * Runs a named redesign play (C5's option set) as one scenario move. The
+ * play only *proposes* operations — each is still executed through the
+ * same reassign/remove/rebase primitives, so the protected-role guardrail
+ * applies per operation and a blocked one is skipped and reported rather
+ * than failing the whole play.
+ */
+export async function applyPlayAction(
+  orgId: string,
+  playId: string,
+  scenarioId?: string | null
+): Promise<MutationResult & { appliedCount?: number; blockedCount?: number }> {
+  const play = getPlay(playId);
+  if (!play) {
+    return { scenarioId: scenarioId ?? "", blocked: true, blockReason: `Unknown play "${playId}".`, description: "" };
+  }
+
+  let appliedCount = 0;
+  let blockedCount = 0;
+  const blockReasons: string[] = [];
+
+  const result = await applyMutation(
+    orgId,
+    scenarioId,
+    (positions, rootId) => {
+      const analysis = analysePlay(playId, positions, rootId);
+
+      if (!analysis || analysis.operations.length === 0) {
+        return {
+          positions,
+          blocked: true,
+          blockReason: `"${play.name}" found nothing left to act on in this scenario. ${analysis?.summary ?? ""}`.trim(),
+          description: play.name,
+          affectedIds: [],
+        };
+      }
+
+      let current = positions;
+      const affected: string[] = [];
+
+      for (const op of analysis.operations) {
+        // A position removed by an earlier operation in the same play is
+        // simply gone — not an error worth reporting to the user.
+        if (!current.some((p) => p.id === op.positionId)) continue;
+
+        const outcome =
+          op.kind === "remove"
+            ? remove(current, rootId, op.positionId)
+            : op.kind === "reassign"
+              ? reassign(current, rootId, op.positionId, op.newManagerId)
+              : rebase(current, op.positionId, { cost: op.cost, status: op.status, reason: op.reason });
+
+        if (outcome.blocked) {
+          blockedCount++;
+          if (outcome.blockReason) blockReasons.push(outcome.blockReason);
+          continue;
+        }
+
+        current = outcome.positions;
+        affected.push(...outcome.affectedIds);
+        appliedCount++;
+      }
+
+      if (appliedCount === 0) {
+        return {
+          positions,
+          blocked: true,
+          blockReason: `"${play.name}" was fully blocked by guardrails: ${blockReasons[0] ?? "every candidate is a protected role."}`,
+          description: play.name,
+          affectedIds: [],
+        };
+      }
+
+      return {
+        positions: current,
+        blocked: false,
+        description:
+          `${play.name}: applied ${appliedCount} change${appliedCount === 1 ? "" : "s"}` +
+          (blockedCount > 0 ? `, ${blockedCount} blocked by guardrails` : "") +
+          `. ${analysis.summary}`,
+        affectedIds: affected,
+      };
+    },
+    "play"
+  );
+
+  return { ...result, appliedCount, blockedCount };
 }
 
 /** Called by the map's add-position control and the scenario page. */

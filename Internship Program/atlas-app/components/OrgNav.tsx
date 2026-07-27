@@ -9,20 +9,22 @@ export function OrgNav({ orgId, active }: { orgId: string; active: string }) {
   ];
 
   return (
-    <nav className="flex gap-1 border-b px-6">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href}
-          className={`border-b-2 px-3 py-3 text-sm ${
-            active === tab.key
-              ? "border-primary font-medium text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {tab.label}
-        </Link>
-      ))}
+    <nav className="sticky top-16 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="mx-auto flex w-full max-w-7xl gap-1 px-6">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            className={`-mb-px border-b-2 px-3 py-3 text-sm transition-colors ${
+              active === tab.key
+                ? "border-primary font-semibold text-foreground"
+                : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
     </nav>
   );
 }

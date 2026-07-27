@@ -49,76 +49,78 @@
 }
 
 :root {
-  /* Shades-of-blue theme. Hue ~258 throughout for the identity/chrome
-     palette; --destructive plus the amber/rose span-health colors used in
-     the map (OrgNodeCard) are reserved status colors and intentionally NOT
-     re-derived from this hue, per the dataviz status-color rule. */
-  --background: oklch(0.99 0.005 250);
-  --foreground: oklch(0.22 0.03 258);
-  --card: oklch(1 0.003 250);
-  --card-foreground: oklch(0.22 0.03 258);
-  --popover: oklch(1 0.003 250);
-  --popover-foreground: oklch(0.22 0.03 258);
-  --primary: oklch(0.47 0.19 260);
-  --primary-foreground: oklch(0.98 0.01 250);
-  --secondary: oklch(0.95 0.02 252);
-  --secondary-foreground: oklch(0.32 0.06 258);
-  --muted: oklch(0.96 0.015 250);
-  --muted-foreground: oklch(0.5 0.035 258);
-  --accent: oklch(0.93 0.035 255);
-  --accent-foreground: oklch(0.3 0.07 258);
+  /* Tract In brand theme, sampled from tractin.com: primary #0048AD,
+     ink #212121, muted #6B7280, section wash #F5F7FA, dark #0B111E.
+     --destructive plus the amber/rose span-health colors used in the map
+     (OrgNodeCard) are reserved status colors and intentionally NOT
+     re-derived from the brand hue, per the dataviz status-color rule. */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2478 0 90);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2478 0 90);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2478 0 90);
+  --primary: oklch(0.4323 0.1734 259.68);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9755 0.0045 258.32);
+  --secondary-foreground: oklch(0.3407 0 90);
+  --muted: oklch(0.9755 0.0045 258.32);
+  --muted-foreground: oklch(0.551 0.0234 264.36);
+  --accent: oklch(0.9556 0.0182 256.5);
+  --accent-foreground: oklch(0.4323 0.1734 259.68);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.02 255);
-  --input: oklch(0.9 0.02 255);
-  --ring: oklch(0.55 0.15 260);
-  --chart-1: oklch(0.85 0.06 255);
-  --chart-2: oklch(0.7 0.1 258);
-  --chart-3: oklch(0.56 0.15 260);
-  --chart-4: oklch(0.44 0.17 262);
-  --chart-5: oklch(0.32 0.15 263);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.97 0.015 250);
-  --sidebar-foreground: oklch(0.22 0.03 258);
-  --sidebar-primary: oklch(0.47 0.19 260);
-  --sidebar-primary-foreground: oklch(0.98 0.01 250);
-  --sidebar-accent: oklch(0.93 0.035 255);
-  --sidebar-accent-foreground: oklch(0.3 0.07 258);
-  --sidebar-border: oklch(0.9 0.02 255);
-  --sidebar-ring: oklch(0.55 0.15 260);
+  --border: oklch(0.9223 0.0072 264.36);
+  --input: oklch(0.9223 0.0072 264.36);
+  --ring: oklch(0.4323 0.1734 259.68);
+  --chart-1: oklch(0.4323 0.1734 259.68);
+  --chart-2: oklch(0.7212 0.1463 256.92);
+  --chart-3: oklch(0.5762 0.1583 258.3);
+  --chart-4: oklch(0.8256 0.0812 255.5);
+  --chart-5: oklch(0.3178 0.1281 262);
+  --radius: 0.375rem;
+  --sidebar: oklch(0.9755 0.0045 258.32);
+  --sidebar-foreground: oklch(0.2478 0 90);
+  --sidebar-primary: oklch(0.4323 0.1734 259.68);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.9556 0.0182 256.5);
+  --sidebar-accent-foreground: oklch(0.4323 0.1734 259.68);
+  --sidebar-border: oklch(0.9223 0.0072 264.36);
+  --sidebar-ring: oklch(0.4323 0.1734 259.68);
 }
 
 .dark {
-  --background: oklch(0.17 0.025 258);
-  --foreground: oklch(0.95 0.015 250);
-  --card: oklch(0.22 0.03 258);
-  --card-foreground: oklch(0.95 0.015 250);
-  --popover: oklch(0.22 0.03 258);
-  --popover-foreground: oklch(0.95 0.015 250);
-  --primary: oklch(0.72 0.15 258);
-  --primary-foreground: oklch(0.16 0.03 258);
-  --secondary: oklch(0.29 0.035 258);
-  --secondary-foreground: oklch(0.9 0.02 250);
-  --muted: oklch(0.27 0.03 258);
-  --muted-foreground: oklch(0.68 0.03 255);
-  --accent: oklch(0.33 0.05 258);
-  --accent-foreground: oklch(0.92 0.02 250);
+  /* Anchored on tractin.com's dark section colour #0B111E. */
+  --background: oklch(0.1788 0.0286 264.75);
+  --foreground: oklch(0.97 0.005 258);
+  --card: oklch(0.2246 0.0286 264.75);
+  --card-foreground: oklch(0.97 0.005 258);
+  --popover: oklch(0.2246 0.0286 264.75);
+  --popover-foreground: oklch(0.97 0.005 258);
+  --primary: oklch(0.7212 0.1463 256.92);
+  --primary-foreground: oklch(0.1788 0.0286 264.75);
+  --secondary: oklch(0.2746 0.0286 264.75);
+  --secondary-foreground: oklch(0.95 0.008 258);
+  --muted: oklch(0.2746 0.0286 264.75);
+  --muted-foreground: oklch(0.72 0.022 264);
+  --accent: oklch(0.3146 0.0402 261);
+  --accent-foreground: oklch(0.7212 0.1463 256.92);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.85 0.03 255 / 14%);
-  --input: oklch(0.85 0.03 255 / 18%);
-  --ring: oklch(0.6 0.12 258);
-  --chart-1: oklch(0.8 0.08 255);
-  --chart-2: oklch(0.68 0.12 258);
-  --chart-3: oklch(0.56 0.15 260);
-  --chart-4: oklch(0.44 0.16 262);
-  --chart-5: oklch(0.32 0.14 263);
-  --sidebar: oklch(0.2 0.03 258);
-  --sidebar-foreground: oklch(0.95 0.015 250);
-  --sidebar-primary: oklch(0.55 0.2 263);
-  --sidebar-primary-foreground: oklch(0.98 0.01 250);
-  --sidebar-accent: oklch(0.33 0.05 258);
-  --sidebar-accent-foreground: oklch(0.92 0.02 250);
-  --sidebar-border: oklch(0.85 0.03 255 / 14%);
-  --sidebar-ring: oklch(0.6 0.12 258);
+  --border: oklch(0.85 0.02 258 / 14%);
+  --input: oklch(0.85 0.02 258 / 18%);
+  --ring: oklch(0.7212 0.1463 256.92);
+  --chart-1: oklch(0.7212 0.1463 256.92);
+  --chart-2: oklch(0.5762 0.1583 258.3);
+  --chart-3: oklch(0.8256 0.0812 255.5);
+  --chart-4: oklch(0.4323 0.1734 259.68);
+  --chart-5: oklch(0.3178 0.1281 262);
+  --sidebar: oklch(0.2246 0.0286 264.75);
+  --sidebar-foreground: oklch(0.97 0.005 258);
+  --sidebar-primary: oklch(0.7212 0.1463 256.92);
+  --sidebar-primary-foreground: oklch(0.1788 0.0286 264.75);
+  --sidebar-accent: oklch(0.3146 0.0402 261);
+  --sidebar-accent-foreground: oklch(0.7212 0.1463 256.92);
+  --sidebar-border: oklch(0.85 0.02 258 / 14%);
+  --sidebar-ring: oklch(0.7212 0.1463 256.92);
 }
 
 @layer base {
@@ -131,4 +133,27 @@
   html {
     @apply font-sans;
   }
+  /* tractin.com sets headings in Inter 600 with tight negative tracking
+     that grows with size — the single most recognisable part of the brand
+     typography, so it's applied globally rather than per-component. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold;
+    letter-spacing: -0.022em;
+  }
+  h1 {
+    letter-spacing: -0.032em;
+  }
+}
+
+@utility eyebrow {
+  /* The "• SELECTED OUTCOMES" section label used throughout tractin.com. */
+  @apply flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground;
+  letter-spacing: 0.16em;
+}
+
+@utility eyebrow-dot {
+  @apply inline-block size-1.5 shrink-0 rounded-full bg-primary;
 }

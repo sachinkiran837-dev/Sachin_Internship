@@ -1,9 +1,14 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redirect } from "next/navigation";
-import { parseEstablishmentFile, UnsupportedFileError } from "@/lib/ingest/parseFile";
+import {
+  parseEstablishmentFile,
+  SUPPORTED_FORMATS,
+  UnsupportedFileError,
+} from "@/lib/ingest/parseFile";
 import { buildOrgGraph } from "@/lib/ingest/buildGraph";
 import { createOrg, saveIssues, savePositions } from "@/db/repo";
 
@@ -35,14 +40,30 @@ export async function ingestFileAction(
 
     const parsed = parseEstablishmentFile(filename, buffer);
     const orgId = await createOrg({
-      name: filename.replace(/\.(csv|xlsx|xls)$/i, ""),
+      name: stripExtension(filename),
       sourceFilename: filename,
       anonymized: anonymize,
     });
 
     const { positions, issues } = await buildOrgGraph(parsed, { orgId, anonymize });
     await savePositions(positions);
-    await saveIssues(issues);
+
+    // The format conversion is recorded as an ingest issue so the confirm
+    // screen states what Atlas did to the file — the visible-fallback rule
+    // applies to normalisation too, not just the AI-shaped behaviours.
+    await saveIssues([
+      {
+        id: randomUUID(),
+        orgId,
+        kind: "conversion" as const,
+        positionId: null,
+        detail: `${parsed.conversion.sourceFormat} source · ${parsed.conversion.detail} ${parsed.conversion.rowCount} row${
+          parsed.conversion.rowCount === 1 ? "" : "s"
+        } and ${parsed.headers.length} column${parsed.headers.length === 1 ? "" : "s"} read.`,
+        resolved: true,
+      },
+      ...issues,
+    ]);
 
     redirect(`/org/${orgId}`);
   } catch (err) {
@@ -55,4 +76,11 @@ export async function ingestFileAction(
     }
     return { error: `Ingest failed: ${(err as Error).message}` };
   }
+}
+
+function stripExtension(filename: string): string {
+  for (const { ext } of SUPPORTED_FORMATS) {
+    if (filename.toLowerCase().endsWith(ext)) return filename.slice(0, -ext.length);
+  }
+  return filename;
 }

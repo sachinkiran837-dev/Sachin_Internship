@@ -28,10 +28,14 @@ export default async function OrgConfirmPage({
   const positions = await getBaselinePositions(orgId);
   const issues = await getIssues(orgId);
 
+  const conversions = issues.filter((i) => i.kind === "conversion");
   const unmapped = issues.filter((i) => i.kind === "unmapped_column");
   const orphans = issues.filter((i) => i.kind === "orphan");
   const duplicates = issues.filter((i) => i.kind === "duplicate");
   const lowConfidence = issues.filter((i) => i.kind === "low_confidence");
+  // A conversion note isn't something to review — it's a record of what
+  // Atlas did to the file, so it doesn't count toward "no ingest issues".
+  const reviewable = issues.filter((i) => i.kind !== "conversion");
 
   return (
     <div className="flex flex-1 flex-col">
@@ -50,7 +54,21 @@ export default async function OrgConfirmPage({
           </Link>
         </div>
 
-        {issues.length === 0 ? (
+        {conversions.length > 0 && (
+          <div className="rounded-md border border-primary/30 bg-accent/40 px-4 py-3">
+            <p className="eyebrow mb-1.5">
+              <span className="eyebrow-dot" aria-hidden />
+              Source conversion
+            </p>
+            {conversions.map((c) => (
+              <p key={c.id} className="text-sm text-foreground">
+                {c.detail}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {reviewable.length === 0 ? (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
               No ingest issues — every row mapped cleanly and every reporting line resolved.

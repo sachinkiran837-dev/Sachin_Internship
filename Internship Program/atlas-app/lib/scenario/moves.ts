@@ -156,6 +156,63 @@ export function add(
   };
 }
 
+/**
+ * Rebase a position's cost and employment status without moving it in the
+ * structure — the primitive behind converting agency/contract capacity to
+ * permanent, where the work stays and only its price changes. Protected
+ * roles are still guarded: their cost is a governance fact, not a lever.
+ */
+export function rebase(
+  positions: Position[],
+  positionId: string,
+  input: { cost: number; status?: Position["status"]; reason: string }
+): MoveOutcome {
+  const position = positions.find((p) => p.id === positionId);
+  if (!position) {
+    return { positions, blocked: true, blockReason: "Position not found.", description: "Rebase", affectedIds: [] };
+  }
+
+  const protectedGuard = checkProtected(position);
+  if (protectedGuard.blocked) {
+    return {
+      positions,
+      blocked: true,
+      blockReason: protectedGuard.reason,
+      description: `Rebase "${position.title}"`,
+      affectedIds: [positionId],
+    };
+  }
+
+  if (input.cost >= position.cost) {
+    return {
+      positions,
+      blocked: true,
+      blockReason: `Rebasing "${position.title}" wouldn't reduce its cost — left unchanged.`,
+      description: `Rebase "${position.title}"`,
+      affectedIds: [positionId],
+    };
+  }
+
+  const next = positions.map((p) =>
+    p.id === positionId ? { ...p, cost: input.cost, status: input.status ?? p.status } : p
+  );
+
+  return {
+    positions: next,
+    blocked: false,
+    description: `Rebased "${position.title}" from ${money(position.cost)} to ${money(input.cost)} — ${input.reason}.`,
+    affectedIds: [positionId],
+  };
+}
+
+function money(n: number): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
 /** Merge a function into a shared service: graft one department's subtree root under another's. */
 export function merge(positions: Position[], rootId: string | null, fromNeedle: string, intoNeedle: string): MoveOutcome {
   const intoManager = findSubject(positions, intoNeedle);

@@ -11,14 +11,18 @@ export default async function Home() {
   const aiEnabled = hasAI();
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-14">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Atlas</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          POC candidate — org-mapping and redesign scenario tool. Ingest an establishment export,
-          explore and edit the structure, model a redesign, and get a plain-language read.
+        <p className="eyebrow mb-3">
+          <span className="eyebrow-dot" aria-hidden />
+          Establishment mapping
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <h1 className="text-4xl">Map the org. Model the redesign.</h1>
+        <p className="mt-3 max-w-2xl text-base text-muted-foreground">
+          Ingest an establishment export in any format, explore and edit the structure, model a
+          redesign against real cost and safe-staffing guardrails, and get a plain-language read.
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">
           Running {aiEnabled ? "with" : "without"} AI-assisted classification and narrative.
           {!aiEnabled && " Set ANTHROPIC_API_KEY to enable it — deterministic fallbacks are in use."}
         </p>

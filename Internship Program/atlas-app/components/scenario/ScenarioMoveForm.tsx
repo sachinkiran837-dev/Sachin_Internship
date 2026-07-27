@@ -24,6 +24,10 @@ export function ScenarioMoveForm({ orgId, scenarioId }: { orgId: string; scenari
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
+      <p className="text-sm text-muted-foreground">
+        For a change the plays above don&apos;t cover — name one role or department and what should
+        happen to it. Anything Atlas can&apos;t parse is rejected, never guessed at.
+      </p>
       <div className="flex gap-2">
         <Input
           name="move"
@@ -34,10 +38,14 @@ export function ScenarioMoveForm({ orgId, scenarioId }: { orgId: string; scenari
           {isPending ? "Applying…" : "Apply move"}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Try: flatten &lt;role&gt; to N layers · merge &lt;dept&gt; into &lt;role&gt; · remove
-        &lt;role&gt; · reassign &lt;role&gt; to &lt;role&gt; · add a &lt;title&gt; under &lt;role&gt;
-      </p>
+      <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+        <span className="font-medium">Recognised phrasings</span>
+        <code className="font-mono">flatten &lt;role or department&gt; to &lt;N&gt; layers</code>
+        <code className="font-mono">merge &lt;department&gt; into &lt;role&gt;</code>
+        <code className="font-mono">reassign &lt;role&gt; to &lt;role&gt;</code>
+        <code className="font-mono">add a &lt;title&gt; under &lt;role&gt;</code>
+        <code className="font-mono">remove &lt;role&gt;</code>
+      </div>
       {state.message && (
         <p className={`text-sm ${state.isError ? "text-destructive" : "text-muted-foreground"}`}>
           {state.message}
