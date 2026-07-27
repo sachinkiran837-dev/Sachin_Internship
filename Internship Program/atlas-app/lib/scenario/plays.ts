@@ -291,10 +291,20 @@ const agencyPremium: ScenarioPlay = {
     }
 
     if (candidates.length === 0) {
+      // The usual reason on a real client's data is not that agency is
+      // cheap — it is that the agency population arrived with no cost at
+      // all, which the confirm screen is already asking about. Saying
+      // "none priced above their equivalent" without saying that reads as
+      // a finding when it is a gap in the data.
+      const unpriced = contingent.filter((n) => annualCost(n) <= 0).length;
       return empty(
         this.id,
-        "Agency positions found, but none priced above their permanent equivalent.",
-        "Compared each contingent role's fully-loaded cost against the median permanent cost of the same base title."
+        unpriced === contingent.length
+          ? `All ${contingent.length} agency position${contingent.length === 1 ? "" : "s"} in this establishment carry no cost, so there is no premium to measure.`
+          : "Agency positions found, but none priced above their permanent equivalent.",
+        unpriced === contingent.length
+          ? "This play compares what agency labour costs against the permanent equivalent. Supply the agency spend or the hours behind these positions on the confirm screen and it can run."
+          : "Compared each contingent role's fully-loaded cost against the median permanent cost of the same base title."
       );
     }
 

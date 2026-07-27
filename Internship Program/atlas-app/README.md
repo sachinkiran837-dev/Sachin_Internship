@@ -87,6 +87,14 @@ Everything the plan asks for is validated against what actually arrived before a
 
 Without an `ANTHROPIC_API_KEY` the box still accepts instructions, and the confirm screen says plainly that they were **stored and not applied** — the visible-fallback pattern applied to a behaviour whose fallback is doing nothing. Nothing is guessed at from the text.
 
+### Zero FTE is agency staffing
+
+An FTE column is read as it stands, zero included. Zero is not a missing value in a workforce export — it is a statement that someone holds no contracted establishment, which is how these systems record agency labour. Atlas used to round it up to 1, which turned 563 of one client's agency workers into full-time employees and claimed 1,004 FTE where the files said 406.
+
+So a position at zero FTE is marked contingent, drawn on the map as **agency**, filterable on its own, and counted in a **contracted FTE** figure shown beside headcount — the gap between the two is the agency population, and it is the gap a redesign argues over. That reading is a reading, not something the column says, so it is in the register as an assumption with its count and its consequences, and the client can overrule it.
+
+It follows that agency staff contribute headcount but no establishment FTE, and therefore no cost in a cost × FTE model. The agency-premium play says so plainly rather than reporting "no premium found", because those are different findings.
+
 ### What Atlas assumed, and what it refused to assume
 
 Atlas holds no defaults about a client. There is no file of standard hours, no house view of what a brand code means, no fallback salary — because every one of those is Atlas's arithmetic wearing the client's data, and a figure nobody can trace is worse to them than a visible gap. So each read produces a **register** (`lib/ingest/notes.ts`), shown on the confirm screen between the ingest and the map, holding two kinds of entry:
@@ -97,6 +105,10 @@ Atlas holds no defaults about a client. There is no file of standard hours, no h
 Questions are answerable in place. Supply the paid hours, or pair *"365C"* with *"365 Care"*, and Atlas **re-reads the original files** — the bytes are kept in `source_blobs` for exactly this — into the same establishment, with the same id, and the question comes back as an assumption naming the client as its source. Answers accumulate in `orgs.answers_json`, so a later correction never silently drops an earlier one.
 
 Nothing is patched into the saved positions. A paid-hours figure changes what every hourly row costs, which changes the coverage figures, which changes which questions are still worth asking — a re-read is the only version of "apply my correction" that leaves the map, the per-file report and the register describing the same thing.
+
+**A correction can also just be written out.** The reply box on the confirm screen goes to the planner along with the whole previous read — the role each file was given, every column recognised, every question left open, every value found in the consolidation column — so a remark like *"the payroll is FY27 but the chart is a year old, trust the payroll"* is answered by a reader that can see what it is correcting. The plan it returns can carry facts only the client knows (`a full-time week is 38 hours`, `AUH is AgeUp`) as well as file roles and column meanings; because those change what a file *means*, the files are read a second time with them in hand. Everything returned is checked against values that actually appear in the files, and anything applied is stated back on the register — answering a question must not make it vanish.
+
+Two guards fall out of that. A plan override can never take the cost or name field from a column Atlas composed: `Rate` is what someone earns in an hour, and mapping it to cost prices a care worker's year at $36. And a plan cut off at its token ceiling reports itself as too long rather than as an unreadable shape, because those call for opposite responses.
 
 **Where two files disagree, Atlas says so rather than resolving it.** One export calls the brand `BRAND` and another `Source Brand`; the plan names both and they are coalesced into one column, so consolidating doesn't leave half the organisation ungrouped. But one file's values are `365 Care, Accept Care, Homewell` and the other's are `365C, ACG, HWL`, and nothing in the data says those are the same brands — only the client knows. So the model drafts the pairing, every value it returns is checked back against the lists it was given, and the whole thing is offered as an editable proposal that changes nothing until it is confirmed. Clearing a box keeps two values apart, which matters as much as merging them.
 

@@ -17,7 +17,7 @@ export function MapLegend() {
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded-full bg-secondary ring-1 ring-border" />
-        Contingent / contractor
+        Agency / contingent — no contracted FTE
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded-full border border-dashed border-muted-foreground/60 bg-card" />
