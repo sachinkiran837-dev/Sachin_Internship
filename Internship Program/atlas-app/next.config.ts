@@ -11,13 +11,13 @@ const nextConfig: NextConfig = {
        * the chance to explain itself and the upload simply appears to do
        * nothing.
        *
-       * 4MB is the ceiling worth setting: Vercel rejects a serverless request
-       * body over 4.5MB at its own edge, so a larger value here would pass in
-       * development only to fail in production. The upload form enforces the
-       * same number client-side (MAX_UPLOAD_BYTES) so the user is told before
-       * submitting rather than after.
+       * Note this is not the only ceiling in play: the host applies its own
+       * request-body limit at the edge, before the request reaches Next at
+       * all, so on a deployment the effective maximum is the lower of the
+       * two. MAX_UPLOAD_BYTES in lib/ingest/formats.ts is what the upload
+       * form enforces, and is the number a user is actually held to.
        */
-      bodySizeLimit: "4mb",
+      bodySizeLimit: "10mb",
     },
   },
 };

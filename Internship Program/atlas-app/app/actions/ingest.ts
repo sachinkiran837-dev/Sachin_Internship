@@ -9,7 +9,7 @@ import { SUPPORTED_FORMATS } from "@/lib/ingest/formats";
 import { readSourceFile } from "@/lib/ingest/readSource";
 import { bindFiles, type SourceFile } from "@/lib/ingest/bindFiles";
 import { buildOrgGraph } from "@/lib/ingest/buildGraph";
-import { createOrg, saveIssues, savePositions } from "@/db/repo";
+import { createOrg, deleteUploads, loadUpload, saveIssues, savePositions } from "@/db/repo";
 
 export interface IngestActionState {
   error: string | null;
@@ -23,37 +23,66 @@ export async function ingestFileAction(
 ): Promise<IngestActionState> {
   const anonymize = formData.get("anonymize") === "on";
   const useSample = formData.get("useSample") === "on";
+
+  // Two ways a file can arrive. Normally the browser has already streamed it
+  // to /api/upload in chunks and passes the id it was staged under, which is
+  // what lets an upload exceed what one request can carry. Files attached
+  // directly still work — that's the no-JavaScript path, and the one the
+  // verification scripts drive.
+  const uploadIds = formData
+    .getAll("uploadId")
+    .map(String)
+    .filter((id) => id.length > 0);
   const uploaded = formData
     .getAll("file")
     .filter((f): f is File => f instanceof File && f.size > 0);
 
   try {
     const sources: SourceFile[] = [];
+    const incoming: { filename: string; buffer: Buffer }[] = [];
 
-    if (useSample || uploaded.length === 0) {
+    if (useSample || (uploadIds.length === 0 && uploaded.length === 0)) {
       const buffer = await readFile(path.join(process.cwd(), "db", "seed-data", SAMPLE_FILE));
-      sources.push({ filename: SAMPLE_FILE, parsed: await readSourceFile(SAMPLE_FILE, buffer) });
+      incoming.push({ filename: SAMPLE_FILE, buffer });
     } else {
-      // Read every file, and record a failure as a property of that file
-      // rather than throwing. One unreadable file among several is not a
-      // reason to refuse the rest — and to a user, a refused batch is
-      // indistinguishable from multi-file upload simply not working.
+      for (const id of uploadIds) {
+        const staged = await loadUpload(id);
+        if (staged) {
+          incoming.push(staged);
+        } else {
+          sources.push({
+            filename: "An uploaded file",
+            error:
+              "This file did not arrive completely — the connection may have dropped part-way. Add it again.",
+          });
+        }
+      }
       for (const file of uploaded) {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        try {
-          sources.push({ filename: file.name, parsed: await readSourceFile(file.name, buffer) });
-        } catch (err) {
-          if (err instanceof UnsupportedFileError) {
-            sources.push({ filename: file.name, error: err.message });
-          } else {
-            sources.push({
-              filename: file.name,
-              error: `Reading this file failed: ${(err as Error).message}`,
-            });
-          }
+        incoming.push({ filename: file.name, buffer: Buffer.from(await file.arrayBuffer()) });
+      }
+    }
+
+    // Read every file, and record a failure as a property of that file
+    // rather than throwing. One unreadable file among several is not a
+    // reason to refuse the rest — and to a user, a refused batch is
+    // indistinguishable from multi-file upload simply not working.
+    for (const { filename, buffer } of incoming) {
+      try {
+        sources.push({ filename, parsed: await readSourceFile(filename, buffer) });
+      } catch (err) {
+        if (err instanceof UnsupportedFileError) {
+          sources.push({ filename, error: err.message });
+        } else {
+          sources.push({
+            filename,
+            error: `Reading this file failed: ${(err as Error).message}`,
+          });
         }
       }
     }
+
+    // The staged bytes have been read into memory; nothing needs them again.
+    await deleteUploads(uploadIds);
 
     // One file binds to itself, so this path is the same for one upload or
     // ten — no separate single-file branch to drift out of sync.

@@ -69,9 +69,18 @@ export function unsupportedMessage(filename: string): string {
 }
 
 /**
- * Vercel rejects a serverless request body over 4.5MB at the edge, before any
- * application code runs, so there is no way to report that failure from
- * inside the app. The form stops the user below it instead, with a message
- * that says which files to split out.
+ * The most one submission can carry, enforced by the upload form before
+ * anything is sent. It has to be enforced client-side because both ceilings
+ * above it — Next's `serverActions.bodySizeLimit` and the host's own edge
+ * limit — reject the request before any application code runs, so neither
+ * failure can be explained from inside the app. An upload that is silently
+ * dropped is worse than one that is refused with a reason.
  */
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/**
+ * How much of a file goes in each request to /api/upload. Kept well under
+ * the ~4.5MB a host will accept in one request, so the ceiling above is
+ * about how much data Atlas will take rather than about HTTP.
+ */
+export const CHUNK_BYTES = 1024 * 1024;

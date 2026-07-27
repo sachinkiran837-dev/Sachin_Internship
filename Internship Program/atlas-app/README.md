@@ -29,7 +29,11 @@ The confirm screen states which format was read and what was done to it — the 
 
 **One unreadable file never takes the batch down with it.** Upload five files with a PDF Atlas can't parse among them and the other four still ingest; the fifth is reported per-file as "Not used", with the reason, and stays flagged for review. Refusing the whole batch is indistinguishable — to the person uploading — from multi-file upload simply not working.
 
-**An upload carries at most 4MB in total.** Next caps a Server Action body at 1MB by default and Vercel rejects anything over 4.5MB at its edge, both *before* any application code runs, so neither failure can be reported from inside the app; `next.config.ts` raises the first limit and the upload form enforces the second client-side, telling you to split the batch before you submit rather than after.
+**Tick the files this run should use.** Every attached file gets a checkbox, and only ticked files are uploaded and ingested. The point is to be able to run the same folder of exports several ways — establishment only, then with payroll joined on, then with last year's vacancy report — without re-attaching anything. The size ceiling applies to what is selected, not to what happens to be attached.
+
+**An upload carries up to 10MB per run, and no single request carries more than 1MB.** This split matters. Next caps a Server Action body at 1MB by default, and a host applies its own limit at its edge — Vercel returns `FUNCTION_PAYLOAD_TOO_LARGE` above ~4.5MB — and *both* reject the request before any application code runs, so neither failure can be seen, logged or explained from inside the app. It just looks like nothing happened. So files no longer travel in the form at all: the browser slices each one into 1MB pieces and posts them to `/api/upload` (`lib/ingest/uploadClient.ts`), which stages them in `upload_chunks`; the Server Action then receives only the ids and reassembles the files. That moves the ceiling from "what one HTTP request can carry" to "what Atlas is willing to accept" — a limit the app can enforce itself, and explain, which is why `MAX_UPLOAD_BYTES` is the number the upload form actually holds you to.
+
+An upload missing a piece is refused rather than reassembled: half a spreadsheet still parses, into a plausible establishment that is quietly missing people. Staged chunks are deleted as soon as the ingest reads them, and anything abandoned is purged after an hour.
 
 **Upload as many files as you have.** Org data rarely arrives as one tidy export: it comes as an establishment list plus a payroll extract plus a vacancy report, each from a different system, each naming the same field differently, and often each covering only part of the organisation. `lib/ingest/bindFiles.ts` works out what each file *is* before deciding what to do with it:
 
@@ -69,6 +73,7 @@ npx tsx --env-file=.env.local scripts/verify-upload-action.ts  # the real ingest
 npx tsx --env-file=.env.local scripts/verify-plays.ts          # all ten redesign plays, with their maths re-checked
 npx tsx --env-file=.env.local scripts/verify-binding.ts        # multi-file binding against realistic messy inputs
 npx tsx --env-file=.env.local scripts/verify-formats.ts        # Word tables, image routing, and one bad file among good ones
+npx tsx --env-file=.env.local scripts/verify-chunked-upload.ts # a 2.8MB file staged in pieces and reassembled
 ```
 
 Each of these creates real establishments in the real database, so the home page accumulates `verify-run`s. `npx tsx --env-file=.env.local scripts/delete-orgs.ts` lists them without deleting anything; pass ids (short prefixes are fine) or `--all` to clear them.
@@ -76,6 +81,8 @@ Each of these creates real establishments in the real database, so the home page
 `verify-binding.ts` builds its fixtures from the demo CSV at run time: an establishment split across two files with different column names, a payroll extract that is the only source of cost anywhere, a status report containing staff who have left, and a file with no key at all. It asserts the halves reassemble without loss or duplication, that cost survives the join into the metrics, that unmatched rows are reported rather than absorbed, that the keyless file is refused loudly, and that reporting lines resolve across the file boundary.
 
 `verify-formats.ts` builds a real `.docx` in memory (there is no zip dependency in this project, so it writes the archive itself, as `parseDocument.ts` reads one) and checks that the establishment table wins over the document's version-history table, that a prose-only Word file is refused with a reason, that images route to the vision reader, and that a batch of four files containing two unreadable ones still produces a working org with its costs intact.
+
+`verify-chunked-upload.ts` builds a 2.8MB, 32,000-row establishment, stages it in pieces exactly as the browser does, and checks that it reassembles byte-for-byte, that an upload missing one piece is refused instead of truncated, that the action can ingest from staged ids alone, that every row is either kept or reported as a duplicate, and that the staged bytes are cleared afterwards.
 
 `verify-plays.ts` is the one that keeps the numbers honest: for every play it replays the play's own operations against the diagnostic engine and fails if the claimed saving doesn't equal the sum of the roles it named, if the modelled cost didn't actually move, or if the predicted headcount delta doesn't match what happened.
 

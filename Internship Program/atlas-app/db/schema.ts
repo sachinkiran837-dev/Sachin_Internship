@@ -44,6 +44,24 @@ export const scenarios = pgTable("scenarios", {
   createdAt: text("created_at").notNull(),
 });
 
+/**
+ * Staging for uploads that arrive in pieces. The host rejects any single
+ * request over ~4.5MB at its edge, before application code runs, so a larger
+ * upload has to be sent as several small requests and reassembled here. Rows
+ * live only for the few seconds between the last chunk arriving and the
+ * ingest reading it, and are deleted immediately afterwards.
+ */
+export const uploadChunks = pgTable("upload_chunks", {
+  id: text("id").primaryKey(),
+  uploadId: text("upload_id").notNull(),
+  filename: text("filename").notNull(),
+  chunkIndex: integer("chunk_index").notNull(),
+  chunkCount: integer("chunk_count").notNull(),
+  /** Base64 — the file's bytes, not its parsed contents. */
+  data: text("data").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const auditLog = pgTable("audit_log", {
   id: text("id").primaryKey(),
   scenarioId: text("scenario_id").notNull(),
@@ -59,3 +77,4 @@ export type PositionRow = typeof positions.$inferSelect;
 export type ScenarioRow = typeof scenarios.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type IngestIssueRow = typeof ingestIssues.$inferSelect;
+export type UploadChunkRow = typeof uploadChunks.$inferSelect;

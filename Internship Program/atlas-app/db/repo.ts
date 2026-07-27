@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray, lt } from "drizzle-orm";
 import { db } from "./client";
-import { auditLog, ingestIssues, orgs, positions, scenarios } from "./schema";
+import { auditLog, ingestIssues, orgs, positions, scenarios, uploadChunks } from "./schema";
 import type { IngestIssue, Position, Move, AuditEntry } from "@/lib/graph/types";
 
 /**
@@ -79,6 +79,66 @@ export async function savePositions(rows: Position[]): Promise<void> {
   for (const batch of chunk(insertRows, INSERT_BATCH)) {
     await db.insert(positions).values(batch);
   }
+}
+
+/**
+ * Stores one piece of a file that is being uploaded across several requests.
+ * Chunks are held only until the ingest that consumes them runs.
+ */
+export async function saveUploadChunk(input: {
+  uploadId: string;
+  filename: string;
+  chunkIndex: number;
+  chunkCount: number;
+  data: string;
+}): Promise<void> {
+  await db.insert(uploadChunks).values({
+    id: randomUUID(),
+    ...input,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Reassembles a staged upload. Returns null when the pieces are incomplete
+ * rather than handing back a truncated file — half a spreadsheet parses into
+ * a plausible-looking establishment that is missing people.
+ */
+export async function loadUpload(
+  uploadId: string
+): Promise<{ filename: string; buffer: Buffer } | null> {
+  const rows = await db
+    .select()
+    .from(uploadChunks)
+    .where(eq(uploadChunks.uploadId, uploadId));
+
+  if (rows.length === 0) return null;
+
+  const expected = rows[0].chunkCount;
+  const seen = new Set(rows.map((r) => r.chunkIndex));
+  if (seen.size !== expected) return null;
+
+  const ordered = [...rows].sort((a, b) => a.chunkIndex - b.chunkIndex);
+  return {
+    filename: ordered[0].filename,
+    buffer: Buffer.concat(ordered.map((r) => Buffer.from(r.data, "base64"))),
+  };
+}
+
+export async function deleteUploads(uploadIds: string[]): Promise<void> {
+  if (uploadIds.length === 0) return;
+  await db.delete(uploadChunks).where(inArray(uploadChunks.uploadId, uploadIds));
+}
+
+/**
+ * Clears staged chunks left behind by an upload that was abandoned before it
+ * was ingested — a closed tab, a lost connection. Runs on each new upload so
+ * the table can't grow without bound; an hour is far longer than the seconds
+ * a live upload needs.
+ */
+export async function purgeStaleUploads(): Promise<void> {
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  await db.delete(uploadChunks).where(lt(uploadChunks.createdAt, cutoff));
 }
 
 export async function saveIssues(issues: IngestIssue[]): Promise<void> {
