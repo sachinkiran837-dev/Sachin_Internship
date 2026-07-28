@@ -42,6 +42,7 @@ export function FunctionTable({
 }) {
   const { medians, units, label } = comparison;
   const showRevenue = units.some((u) => u.revenuePerHead !== null);
+  const noManagers = comparison.comparableUnits.filter((u) => u.managers === 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -135,8 +136,17 @@ export function FunctionTable({
               <TableCell className="text-right">
                 {medians.managerShare === null ? "—" : pct(medians.managerShare)}
               </TableCell>
+              {/* Only alongside a management-share median that means
+                  something. The per-manager median is taken over the units
+                  that *have* managers, so where most of them don't, these two
+                  cells would be medians of two different populations sitting
+                  next to each other — and 0% management beside "12.1 people
+                  per manager" reads as a contradiction rather than as two
+                  answers to different questions. */}
               <TableCell className="text-right">
-                {medians.staffPerManager === null ? "—" : medians.staffPerManager.toFixed(1)}
+                {medians.staffPerManager === null || (medians.managerShare ?? 0) <= 0
+                  ? "—"
+                  : medians.staffPerManager.toFixed(1)}
               </TableCell>
               <TableCell className="text-right">—</TableCell>
               <TableCell className="text-right">
@@ -160,6 +170,21 @@ export function FunctionTable({
         {comparison.unclassified > 0 &&
           ` The other ${comparison.unclassified.toLocaleString()} are in no row above and in no median.`}
       </p>
+
+      {/* Said plainly rather than left to be inferred from a column of
+          dashes. A median management share of zero doesn't mean a flat
+          organisation — it almost always means the reporting lines inside
+          those units never arrived, and it silently disables every
+          comparison on this page that depends on who reports to whom. */}
+      {(medians.managerShare ?? 0) <= 0 && comparison.comparableUnits.length > 0 && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+          {noManagers.length} of {comparison.comparableUnits.length} {label.toLowerCase()}s show no
+          manager at all, so the median management share is zero and nothing here can be compared on
+          management load — against a median of zero, any {label.toLowerCase()} with a single manager
+          would read as over-managed. That is usually missing reporting lines rather than a flat
+          organisation.
+        </p>
+      )}
     </div>
   );
 }
