@@ -102,8 +102,23 @@ const NARRATIVE_TIMEOUT_MS = 12_000;
  * and the least important: a findings screen that renders in 7 seconds — or
  * times out at the host's edge and renders not at all — has failed at the one
  * thing it is for, whatever the prose was going to say.
+ *
+ * When the hypothesis layer has produced hypotheses, they are what gets
+ * framed. The metrics are the raw material; the argument the client came for
+ * is "here is what we think is happening, here is what to do, here is what it
+ * is worth", and a summary that led on span-of-control averages instead would
+ * be introducing a different screen.
  */
-export async function generateNarrative(metrics: DiagnosticMetrics): Promise<FindingsResult> {
+export async function generateNarrative(
+  metrics: DiagnosticMetrics,
+  hypotheses: {
+    title: string;
+    thinking: string;
+    action: string;
+    prize: { amount: number | null; statement: string };
+    verdict: string | null;
+  }[] = []
+): Promise<FindingsResult> {
   const findings = buildFindings(metrics);
   const fallback = fallbackNarrative(metrics, findings);
   const followups = findings.flatMap((f) => f.followups);
@@ -111,6 +126,19 @@ export async function generateNarrative(metrics: DiagnosticMetrics): Promise<Fin
   if (!hasAI()) {
     return { narrative: fallback, findings, followups, source: "fallback" };
   }
+
+  const material =
+    hypotheses.length > 0
+      ? `Hypotheses, already computed: ${JSON.stringify(
+          hypotheses.slice(0, 4).map((h) => ({
+            what_we_think: h.title,
+            reasoning: h.thinking,
+            what_to_do: h.action,
+            what_we_get: h.prize.statement,
+            verdict_on_client_belief: h.verdict,
+          }))
+        )}`
+      : `Findings: ${JSON.stringify(findings.map((f) => ({ headline: f.headline, soWhat: f.soWhat })))}`;
 
   try {
     const client = getAnthropicClient();
@@ -121,8 +149,11 @@ export async function generateNarrative(metrics: DiagnosticMetrics): Promise<Fin
         messages: [
           {
             role: "user",
-            content: `You are writing a short narrative for a Project Partner to read out to a client, framing already-computed operating-model metrics. Do not invent or recompute any number — only reference the figures given. Every claim must be traceable to one of these findings.\n\nMetrics: ${JSON.stringify(
-              {
+            content:
+              `You are writing a short narrative for a Project Partner to read out to a client, framing ` +
+              `an already-computed operating-model analysis. Do not invent or recompute any number — only ` +
+              `reference the figures given. Every claim must be traceable to what follows.\n\n` +
+              `Metrics: ${JSON.stringify({
                 headcount: metrics.headcount,
                 totalFte: metrics.totalFte,
                 contingentCount: metrics.contingentCount,
@@ -130,8 +161,10 @@ export async function generateNarrative(metrics: DiagnosticMetrics): Promise<Fin
                 layers: metrics.layers,
                 averageSpan: metrics.averageSpan,
                 protectedCount: metrics.protectedCount,
-              }
-            )}\n\nFindings: ${JSON.stringify(findings.map((f) => ({ headline: f.headline, soWhat: f.soWhat })))}\n\nWrite 2-4 sentences, plain language, no bullet points.`,
+              })}\n\n${material}\n\n` +
+              `Write 2-4 sentences, plain language, no bullet points. Lead with what the analysis thinks ` +
+              `is happening rather than with a count of positions. Where a client belief was tested and ` +
+              `not supported, say so — that is the most useful sentence on the page.`,
           },
         ],
       },

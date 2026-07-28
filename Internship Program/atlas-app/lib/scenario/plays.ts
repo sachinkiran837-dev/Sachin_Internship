@@ -61,6 +61,18 @@ export interface PlayMeta {
   name: string;
   question: string;
   thesis: string;
+  /**
+   * What to actually do, as an instruction rather than a description.
+   *
+   * Every play here can find candidates and price them, which produces a
+   * diagnosis and a number with nothing in between. The thing that gets left
+   * out is the move itself — and the move is where these go wrong, because
+   * "consolidate the sub-scale teams" and "cut a manager in each department"
+   * produce identical savings on a spreadsheet and completely different
+   * organisations. So each play states its own, including what to check
+   * before doing it.
+   */
+  action: string;
   lens: "Structure" | "Workforce mix" | "Spans & layers" | "Portfolio";
 }
 
@@ -74,6 +86,7 @@ function toMeta(play: ScenarioPlay): PlayMeta {
     name: play.name,
     question: play.question,
     thesis: play.thesis,
+    action: play.action,
     lens: play.lens,
   };
 }
@@ -163,6 +176,8 @@ const passThroughLayers: ScenarioPlay = {
   thesis:
     "A manager with exactly one direct report who is themselves a manager isn't running a team — they're a relay between two layers. That is the cleanest cost in an org chart, because the work below them is untouched when they go.",
   lens: "Spans & layers",
+  action:
+    "Ask each relay manager what they decide that the layer above them does not. Where the answer is nothing, move their reports up one level and close the post — the team below is untouched, so this is the change with the least operational risk in the list.",
   analyse(nodes) {
     const byId = new Map(nodes.map((n) => [n.id, n] as const));
     const rootId = rootIdOf(nodes);
@@ -221,6 +236,8 @@ const agencyPremium: ScenarioPlay = {
   thesis:
     "The saving from an agency nurse is not their salary — the shift still has to be covered. It is only the premium over what the same role costs permanently. Counting the whole role is the most common way redesign business cases overstate themselves.",
   lens: "Workforce mix",
+  action:
+    "Get the agency rate and the permanent equivalent for these roles side by side, then convert the ones where the work is genuinely permanent. Do the rate comparison first: converting surge cover to permanent is a cost increase wearing a saving's clothes.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const contingent = nodes.filter((n) => n.status === "contingent");
@@ -342,6 +359,8 @@ const thinSpanConsolidation: ScenarioPlay = {
   thesis:
     "Merging a sub-scale team into a peer only pays if the receiving manager can actually absorb it. Consolidations that push the receiver past a healthy span just move the problem and get reversed within a year.",
   lens: "Spans & layers",
+  action:
+    "Merge each sub-scale team into the nearest one doing related work, and keep the people. What goes is the separate management post, not the team — check the receiving manager can carry the wider span before you commit.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const managers = nodes.filter(isManager);
@@ -438,6 +457,8 @@ const sharedService: ScenarioPlay = {
   thesis:
     "The money in a shared service isn't the analysts — it's the supervisory capacity that fragmenting them created. Consolidating only pays where it leaves a manager with nothing left to manage.",
   lens: "Structure",
+  action:
+    "Pick one owner for the duplicated function and move the work, rather than cutting a role in each department. The saving comes from running the process once; cutting a role in each place while leaving five copies of the process running just makes each copy slower.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const byId = new Map(nodes.map((n) => [n.id, n] as const));
@@ -547,6 +568,8 @@ const wideSpanRedistribution: ScenarioPlay = {
   thesis:
     "An overloaded manager usually triggers a new team-lead hire. If an under-loaded peer can take the overflow, the hire never happens — this is money not spent rather than money cut, and it should be labelled that way.",
   lens: "Spans & layers",
+  action:
+    "Move part of the overloaded manager's team to a peer who is under-loaded, instead of splitting the team and hiring a new lead for it. The relief is the same and the establishment does not grow.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const managers = nodes.filter(isManager);
@@ -654,6 +677,8 @@ const vacancyRationalisation: ScenarioPlay = {
   thesis:
     "A long-held vacancy is budget the org isn't using. The discipline is knowing which ones you can't close: a vacant clinical or safety role is a staffing breach waiting to happen, not a saving.",
   lens: "Portfolio",
+  action:
+    "For each vacancy, ask who is covering the work now. Where the team has absorbed it and service has held, close the line and release the budget. Where nobody is covering it, closing the post makes a live service gap permanent.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const vacant = nodes.filter((n) => n.status === "vacant");
@@ -720,6 +745,8 @@ const shadowRoles: ScenarioPlay = {
   thesis:
     "A deputy who runs part of the team is real capacity. A deputy with no reports of their own, sitting directly under their principal, is duplicated authority — the org is paying twice for one span of control.",
   lens: "Structure",
+  action:
+    "Establish what the deputy holds that the principal does not. Where the answer is nothing but cover, the role is insurance against a single point of failure and should be priced as that — or replaced with a named delegate, which costs nothing.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const byId = new Map(nodes.map((n) => [n.id, n] as const));
@@ -780,6 +807,8 @@ const deepChainCompression: ScenarioPlay = {
   thesis:
     "Layer counts are an average; decisions travel down a specific chain. Targeting the deepest path attacks the distance between the top of house and the frontline, rather than shaving a layer wherever it happens to be easiest.",
   lens: "Spans & layers",
+  action:
+    "Take the longest chain from the frontline to the top and remove the step that adds no decision. Distance from the customer to the decision-maker is what this play is about; the saving is a by-product of shortening it.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     if (nodes.length === 0) return empty(this.id, "Nothing to compress.", "No positions.");
@@ -854,6 +883,8 @@ const managerRatio: ScenarioPlay = {
   thesis:
     "Every span looks defensible one at a time. Sizing management top-down against the number of people actually doing the work exposes the surplus that case-by-case review never finds.",
   lens: "Structure",
+  action:
+    "Rebalance towards the organisation's own median rather than to an outside ratio, function by function, starting with the one furthest from it. A group-wide percentage applied evenly takes the same share out of the functions that are already lean.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const managers = nodes.filter(isManager);
@@ -926,6 +957,8 @@ const contractorInsourcing: ScenarioPlay = {
   thesis:
     "Outsourcing a handful of roles is cheaper than managing them. Past a certain cluster size that flips, and the vendor margin becomes pure overhead — the trick is knowing where the line sits rather than in-housing everything.",
   lens: "Workforce mix",
+  action:
+    "Bring the largest clusters in-house and leave the small ones with the vendor. Below a certain size in-housing does not pay for its own supervision, which is why the play sizes the clusters before it prices them.",
   analyse(nodes) {
     const rootId = rootIdOf(nodes);
     const minSize = assumptions.outsourcingMinClusterSize;

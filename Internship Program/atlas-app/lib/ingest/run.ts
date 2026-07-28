@@ -7,10 +7,16 @@ import { planIngest, type IngestPlan, type PriorRead } from "./plan";
 import { appliedMapping, costCoverage, reconcileGroups } from "./reconcile";
 import type { IngestNote } from "./notes";
 import type { IngestAnswers } from "./answers";
+import type { Position } from "@/lib/graph/types";
+import { unitNames } from "@/lib/analysis/functions";
+import { readBusinessContext } from "@/lib/hypothesis/read";
+import { EMPTY_BUSINESS } from "@/lib/hypothesis/context";
 import {
   clearDerived,
   createOrg,
+  getBaselineRootId,
   saveAnswers,
+  saveBusinessContext,
   saveIssues,
   saveNotes,
   savePositions,
@@ -38,6 +44,14 @@ export interface IngestRequest {
   /** Files that never arrived intact, reported alongside the ones that did. */
   failures: { filename: string; error: string }[];
   context: string;
+  /**
+   * The hypothesis layer, verbatim: what the client said about the business
+   * rather than about the files. Read after the establishment is built, not
+   * before, because a revenue figure can only be attached to a unit once the
+   * units exist — and on a re-read the units may have changed, so it is read
+   * again from the same words rather than carried forward.
+   */
+  hypothesis?: string;
   anonymize: boolean;
   answers: IngestAnswers;
   /**
@@ -179,6 +193,11 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   });
   await savePositions(positions);
 
+  // The hypothesis layer, read against the establishment that now exists.
+  // Nothing in it touches the map or the positions — it decides what the
+  // findings can say, which is why it is read here and applied later.
+  await saveBusinessContext(orgId, await readHypothesis(request.hypothesis, positions));
+
   // What each file turned out to contain, kept per file so the confirm screen
   // can answer questions about a specific upload rather than only about the
   // merged result.
@@ -204,6 +223,29 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   ]);
 
   return { orgId };
+}
+
+/**
+ * Turns what the client wrote about their business into facts the findings
+ * can compute against, naming the units this establishment actually has so a
+ * figure can never be attached to a part of the business that isn't there.
+ *
+ * A failure here is not a failure of the ingest. The establishment is already
+ * saved and correct; all that is lost is the framing, so the context is stored
+ * as prose and the screens say the figures could not be read out of it.
+ */
+async function readHypothesis(raw: string | undefined, positions: Position[]) {
+  const text = (raw ?? "").trim();
+  if (text.length === 0) return EMPTY_BUSINESS;
+  try {
+    return await readBusinessContext(text, unitNames(positions, getBaselineRootId(positions)));
+  } catch (err) {
+    return {
+      ...EMPTY_BUSINESS,
+      raw: text,
+      unmatched: [`Atlas kept what you wrote but could not read figures out of it: ${(err as Error).message}`],
+    };
+  }
 }
 
 /**

@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { runIngest } from "@/lib/ingest/run";
 import { mergeAnswers } from "@/lib/ingest/answers";
-import { getAnswers, getNotes, getOrg, getSourceBlobs, getSourceFiles } from "@/db/repo";
+import {
+  getAnswers,
+  getBusinessContext,
+  getNotes,
+  getOrg,
+  getSourceBlobs,
+  getSourceFiles,
+} from "@/db/repo";
 
 /**
  * Answers the questions Atlas raised, and reads the establishment again with
@@ -61,9 +68,10 @@ export async function answerIngestAction(
     // reads the client's sentence can see the reading being corrected — the
     // roles it gave each file, the questions it could not close, the values
     // it found. Without it, "the chart isn't the structure" is unanswerable.
-    const [priorFiles, priorNotes] = await Promise.all([
+    const [priorFiles, priorNotes, business] = await Promise.all([
       getSourceFiles(orgId),
       getNotes(orgId),
+      getBusinessContext(orgId),
     ]);
 
     const result = await runIngest({
@@ -71,6 +79,11 @@ export async function answerIngestAction(
       incoming: blobs,
       failures: [],
       context,
+      // Read again from the client's original words rather than carried
+      // forward. A correction can merge two brands into one, and a revenue
+      // figure attached to a unit that no longer exists would silently drop
+      // out of every ratio on the findings screen.
+      hypothesis: business.raw,
       anonymize: org.anonymized,
       answers: { ...answers, extraContext: "" },
       prior: {

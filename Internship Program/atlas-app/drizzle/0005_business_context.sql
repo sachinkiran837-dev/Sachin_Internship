@@ -1,0 +1,1 @@
+ALTER TABLE "orgs" ADD COLUMN "business_json" text;

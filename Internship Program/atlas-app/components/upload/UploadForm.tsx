@@ -41,6 +41,7 @@ export function UploadForm() {
   const [selected, setSelected] = useState<File[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [context, setContext] = useState("");
+  const [hypothesis, setHypothesis] = useState("");
   const [dragging, setDragging] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -96,6 +97,7 @@ export function UploadForm() {
       data.set("useSample", "off");
       data.set("anonymize", anonymize ? "on" : "off");
       data.set("context", context);
+      data.set("hypothesis", hypothesis);
       for (const id of ids) data.append("uploadId", id);
 
       startSubmit(() => formAction(data));
@@ -330,6 +332,42 @@ export function UploadForm() {
           </p>
         </div>
       )}
+
+      {/* The second context window, and the one that decides what Atlas can
+          say rather than what it can read. An establishment file will tell it
+          that a function runs one manager per three people; only a person can
+          tell it what that function earns, what the business is trying to
+          reach, and what leadership already suspects. Offered on the sample
+          run too — the layer is about the business, not about the upload. */}
+      <div className="flex flex-col gap-1.5 rounded-lg border border-primary/30 bg-accent/30 p-4">
+        <p className="eyebrow">
+          <span className="eyebrow-dot" aria-hidden />
+          Hypothesis layer
+        </p>
+        <Label htmlFor="hypothesis" className="text-sm font-medium">
+          What&rsquo;s going on in the business?
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          What it does and what it earns, what you&rsquo;re trying to reach, and what you already
+          suspect is wrong. Atlas tests each suspicion against the establishment and tells you
+          plainly when the data doesn&rsquo;t support it. Revenue is the one thing no payroll export
+          contains and the one that turns &ldquo;this function looks expensive&rdquo; into revenue
+          per head — a line each is enough. Everything you write is quoted back next to the figures
+          it produced, and nothing here changes the map.
+        </p>
+        <textarea
+          id="hypothesis"
+          name="hypothesis"
+          rows={4}
+          value={hypothesis}
+          onChange={(e) => setHypothesis(e.target.value)}
+          placeholder="Optional. e.g. Home care across six brands. AgeUp did about $40m last year, Homewell $26m. We need $3m out of the cost base by FY27 without touching frontline care. We think head office has grown faster than the business and that Platform is over-managed."
+          className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        />
+        <p className="text-xs text-muted-foreground">
+          You can add or change this at any point after ingest — it never re-reads your files.
+        </p>
+      </div>
 
       <div className="flex items-center gap-2">
         <input

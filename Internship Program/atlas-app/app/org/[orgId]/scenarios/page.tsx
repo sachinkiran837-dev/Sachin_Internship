@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getBaselinePositions, getBaselineRootId, getOrg, listScenarios } from "@/db/repo";
+import {
+  getBaselinePositions,
+  getBaselineRootId,
+  getBusinessContext,
+  getOrg,
+  listScenarios,
+} from "@/db/repo";
 import { compareScenarios } from "@/lib/scenario/compare";
 import { analyseAllPlays } from "@/lib/scenario/plays";
 import { OrgNav } from "@/components/OrgNav";
@@ -26,6 +32,8 @@ export default async function ScenariosPage({ params }: { params: Promise<{ orgI
 
   const baseline = await getBaselinePositions(orgId);
   const rootId = getBaselineRootId(baseline);
+  const business = await getBusinessContext(orgId);
+  const costTarget = business.targets.find((t) => t.measure === "cost" && t.amount !== null);
   const scenarios = await listScenarios(orgId);
   const { baselineMetrics, comparisons } = compareScenarios(
     baseline,
@@ -76,6 +84,23 @@ export default async function ScenariosPage({ params }: { params: Promise<{ orgI
               They overlap deliberately — the same thin-span manager can appear in several plays —
               so the savings must not be added together. The largest single play here is worth{" "}
               {currency(largest)}.
+            </p>
+          )}
+
+          {/* Measured against what the client actually said they need, rather
+              than presented as ten options of unstated relevance. */}
+          {costTarget?.amount != null && live.length > 0 && (
+            <p className="mt-2 rounded-md border px-3 py-2 text-sm">
+              <span className="font-medium">Against your target.</span> You said:{" "}
+              &ldquo;{costTarget.statedAs}&rdquo; The largest single play Atlas can evidence is worth{" "}
+              {currency(largest)},{" "}
+              {largest >= costTarget.amount
+                ? `which reaches ${currency(costTarget.amount)} on its own.`
+                : `leaving ${currency(costTarget.amount - largest)} that structure alone does not account for.`}{" "}
+              <Link href={`/org/${orgId}/findings`} className="underline underline-offset-4">
+                See what that means
+              </Link>
+              .
             </p>
           )}
 

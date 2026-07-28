@@ -17,6 +17,7 @@ import type { FileBinding } from "@/lib/ingest/bindFiles";
 import type { IngestPlan } from "@/lib/ingest/plan";
 import type { IngestNote } from "@/lib/ingest/notes";
 import { parseAnswers, type IngestAnswers } from "@/lib/ingest/answers";
+import { parseBusinessContext, type BusinessContext } from "@/lib/hypothesis/context";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -248,6 +249,29 @@ export async function hasSourceBlobs(orgId: string): Promise<boolean> {
 export async function getAnswers(orgId: string): Promise<IngestAnswers> {
   const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
   return parseAnswers(rows[0]?.answersJson ?? null);
+}
+
+/** The hypothesis layer: what the client said about the business itself. */
+export async function getBusinessContext(orgId: string): Promise<BusinessContext> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  return parseBusinessContext(rows[0]?.businessJson ?? null);
+}
+
+/**
+ * Saved on its own, and deliberately without touching anything derived from
+ * the files. The hypothesis layer changes what the findings *mean*, not what
+ * the establishment *is* — so a client can revise what they told Atlas about
+ * the business as often as they like, and the map, the positions and the
+ * ingest register are untouched by it.
+ */
+export async function saveBusinessContext(
+  orgId: string,
+  business: BusinessContext
+): Promise<void> {
+  await db
+    .update(orgs)
+    .set({ businessJson: JSON.stringify(business) })
+    .where(eq(orgs.id, orgId));
 }
 
 /**

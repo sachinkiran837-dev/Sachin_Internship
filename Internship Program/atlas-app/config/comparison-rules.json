@@ -1,0 +1,18 @@
+{
+  "_note": "The rules that decide when one part of an organisation is out of line with the rest of it. Every comparison Atlas makes is against this organisation's own median, never against an industry benchmark — a benchmark would be a number nobody in the room can check, and half of them are wrong for the sector anyway. These thresholds only decide what gets called out; the figures themselves are computed from the establishment either way, so a client who disagrees with a rule can still read the table.",
+
+  "minUnitHeadcount": 8,
+  "minUnitHeadcountNote": "Below this, a unit is not compared against the others. One manager and three people is a 33% management share, which says nothing about how the unit is run — it says the unit is small. Small units still appear in the table, marked as too small to compare.",
+
+  "outlierMultiple": 1.25,
+  "outlierMultipleNote": "How far above the organisation's own median a unit's management share has to sit before it is called out. 1.25 means a quarter again as much management per person as the median unit carries.",
+
+  "minExcessRoles": 1,
+  "minExcessRolesNote": "A unit is only called out when running it at the group median would release at least this many management roles. Stops a rounding difference being reported as a finding.",
+
+  "minDimensionCoverage": 0.5,
+  "minDimensionCoverageNote": "Share of positions that must carry a value before a dimension can be used to compare functions. Below it, the comparison would describe the half of the organisation that happened to be classified. Atlas says which dimension it used and what its coverage was, every time.",
+
+  "minComparableUnits": 2,
+  "minComparableUnitsNote": "A median needs something to be a median of. With one comparable unit there is no 'out of line with the rest'."
+}

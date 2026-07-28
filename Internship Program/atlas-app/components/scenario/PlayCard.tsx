@@ -58,7 +58,10 @@ export function PlayCard({ orgId, play, analysis, layerOntoScenarioId }: PlayCar
 
   return (
     <div
-      className={`rounded-lg border transition-colors ${
+      // Anchored so a hypothesis on the Findings screen can link straight to
+      // the play that models it.
+      id={play.id}
+      className={`scroll-mt-32 rounded-lg border transition-colors ${
         hasCandidates ? "bg-card" : "bg-muted/40"
       }`}
     >
@@ -123,16 +126,27 @@ export function PlayCard({ orgId, play, analysis, layerOntoScenarioId }: PlayCar
           className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
-        {open ? "Hide" : "Show"} the thinking, the maths and the roles
+        {open ? "Hide" : "Show"} what we think, what to do, and what it&rsquo;s worth
       </button>
 
       {open && (
         <div className="flex flex-col gap-4 border-t bg-muted/30 p-4 text-sm">
-          <Section title="Why this unlocks value">
+          <Section title="1. What we think could be happening">
             <p className="text-muted-foreground">{play.thesis}</p>
+            {hasCandidates && <p className="mt-1.5">{analysis.summary}</p>}
           </Section>
 
-          <Section title="How the number is calculated">
+          <Section title="2. What we should do about it">
+            <p className="text-muted-foreground">{play.action}</p>
+          </Section>
+
+          <Section title="3. What we get, and how it is calculated">
+            {hasCandidates && (
+              <p className="mb-1.5 text-base font-semibold text-primary">
+                {currency(analysis.projectedSaving)}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">a year</span>
+              </p>
+            )}
             <p className="text-muted-foreground">{analysis.method}</p>
             {hasCandidates && (
               <p className="mt-1.5 text-xs text-muted-foreground">

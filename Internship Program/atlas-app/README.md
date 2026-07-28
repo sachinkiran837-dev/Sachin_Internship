@@ -165,14 +165,49 @@ Each of these creates real establishments in the real database, so the home page
 
 `verify-corrections.ts` is the round trip the register depends on. It ingests two files that between them hold every refusal Atlas can make — hourly rates with no hours, one brand vocabulary in codes and another in full names — checks that nobody is priced and both questions are raised with a proposal attached, then answers them exactly as the confirm screen does: accepting Atlas's pairing for one value and correcting by hand the one it declined to pair. It asserts the re-read keeps the establishment's id, prices every position at the client's stated hours, merges the reconciled codes so no group survives twice, flips the answered question into an assumption naming the client, drops the reconciled one entirely, and stores the answers for the next re-read.
 
+`verify-hypotheses.ts` covers the hypothesis layer and the function comparison, in memory and without a key — see below for what its central case is and why it is built the way it is.
+
 `verify-plays.ts` is the one that keeps the numbers honest: for every play it replays the play's own operations against the diagnostic engine and fails if the claimed saving doesn't equal the sum of the roles it named, if the modelled cost didn't actually move, or if the predicted headcount delta doesn't match what happened.
+
+## The hypothesis layer, and the three questions
+
+An establishment map answers "what is the shape of this organisation". Nobody restructures on that. The three questions a redesign conversation actually turns on are **what do we think is happening here**, **what should we do about it**, and **what do we get if we do** — and splitting them is how these projects go wrong. A diagnostic with no action is a bill for a slide pack; an action with no diagnosis is a cut looking for a justification; a number with neither is the thing everyone remembers and nobody can defend six months later when it hasn't appeared.
+
+So every hypothesis on the Findings screen carries all three, plus a fourth behind a click: what has to be true for it to hold, and what Atlas could not see. The same three-part shape is on every scenario play (`lib/scenario/plays.ts` gained an `action` field for exactly this — "consolidate the sub-scale teams" and "cut a manager in each department" produce identical savings on a spreadsheet and completely different organisations).
+
+### Compared against itself, never against a benchmark
+
+"Which function is bloated" is meaningless without a *than what*. Atlas's answer is always **the median unit in this same organisation** (`lib/analysis/functions.ts`), and the rules are in `config/comparison-rules.json` rather than inline.
+
+An industry benchmark would let Atlas say "your span is below sector norm", which sounds authoritative and is unfalsifiable in the room — nobody present can check it, and it is a number Atlas would have had to invent or import. A client's own median is a figure they can verify from the table on the same page, and it survives the obvious objection, because a business cannot argue that its own best-run function is unachievable for its others. The median row is printed in the comparison table alongside the units measured against it, including the units that were *not* called out — a comparison that shows only the losers is an argument, not a measurement.
+
+Two refusals do the real work here:
+
+- **A unit below `minUnitHeadcount` is not compared at all.** One manager and three people is a 33% management share, which says nothing about how the unit is run — it says the unit is small. It still appears in the table, marked as too small.
+- **A median of zero is not a benchmark.** Where most units carry no managers — usually because the reporting lines inside them never reached Atlas, not because the organisation is flat — "above the median" becomes true of any unit with a single manager. Atlas refuses the comparison outright and names the missing reporting lines as the cause. This is not hypothetical: it is what the Kinyara group data does, and without the guard every claim put to it came back confirmed.
+
+### What the files can never say
+
+Revenue is the one input that decides whether a function is *expensive* or simply *carrying the business*, and it exists in nobody's payroll export. Neither does what leadership is trying to reach, nor what they already suspect. So the upload screen has a **second context box** — deliberately not the same question as the first. That one is about reading (which file is the structure, what a column means); this one is about meaning.
+
+`lib/hypothesis/read.ts` turns that prose into facts, with the model doing the only job it is trusted with anywhere in Atlas: reading. It never calculates, and **every unit name it returns is checked back against the establishment's real units** — revenue named against a part of the business that doesn't exist is reported as unmatched, never snapped onto whichever unit looks closest. Each figure keeps the client's own sentence attached, and the Business context tab shows the two side by side, because that figure is about to be divided by a headcount and put in front of a board.
+
+The layer is editable at any point and **touches no file and no position**. The establishment is a fact; what changes is what Atlas is able to say about it. A client can revise it four times in a meeting and the map never moves.
+
+### Telling a client they're wrong
+
+The part that earns the name. Someone comes into a restructure already believing something — that operations is over-managed, that head office has grown, that one brand is carrying the others. Repeating it back is worthless; testing it is the job. Each stated belief is put against the establishment and comes back **supported**, **not supported**, or **untestable with what Atlas has** — and an unsupported one is the most valuable result on the page, because it stops a redesign being built on it.
+
+A client's hypothesis is held to exactly the bar Atlas holds its own: half of any set of units sits above its own median by construction, so "above the median" earns nothing. It has to clear `outlierMultiple`, the same distance Atlas would have needed to raise the point unprompted. And where a belief can't be measured — a productivity claim with no revenue supplied, a function too small to judge — Atlas says so and says what would settle it, rather than resolving it either way.
+
+`scripts/verify-hypotheses.ts` pins all of this against a built fixture, with no database, network or key. Its central case is deliberately the uncomfortable one: two functions of identical size, a client who asserts both are over-managed, and an engine that must confirm one and contradict the other. It also checks that no unit carries a revenue figure Atlas wasn't given, that a figure for a non-existent unit reaches nothing, that every hypothesis carries all three parts and at least one stated condition, and that against a median of zero nothing is called out and nothing is confirmed.
 
 ## AI-assisted vs. deterministic (the visible-fallback pattern)
 
-Four behaviours are AI-shaped: role classification (ingest), the findings narrative, reading the upload instructions into an ingest plan, and reading an org chart out of an image or PDF.
+Five behaviours are AI-shaped: role classification (ingest), the findings narrative, reading the upload instructions into an ingest plan, reading the hypothesis layer into business facts, and reading an org chart out of an image or PDF.
 
 Role classification is done **once per distinct role, in batches** — never per position. An establishment holds far fewer job titles than people, so a 32,000-row ingest costs a handful of requests rather than 32,000; per-position calls were invisible while no key was configured and would have made ingest impossible the moment one was. Past 400 distinct titles the keyword classifier takes the remainder, because classification is advisory framing and an ingest that completes on keywords beats one that exceeds the host's function timeout and returns nothing.
- The first three have a deterministic fallback and run on it — visibly, never silently — unless `ANTHROPIC_API_KEY` is set (see `.env.example`). None of them produces a number a client sees: classification is advisory framing, the narrative only frames metrics that were already computed deterministically, and the ingest plan says what each file is *for* without ever touching a row.
+ The first four have a deterministic fallback and run on it — visibly, never silently — unless `ANTHROPIC_API_KEY` is set (see `.env.example`). None of them produces a number a client sees: classification is advisory framing, the narrative only frames metrics that were already computed deterministically, the ingest plan says what each file is *for* without ever touching a row, and the hypothesis reader only extracts figures the client themselves stated — with no key, the prose is kept and shown, and the page says the figures could not be read out of it. Every comparison, ratio and prize on the Findings screen is arithmetic over the establishment either way.
 
 Reading a picture is the exception, and is treated as one. There is no honest deterministic fallback for it, so without a key the file is refused with a reason rather than half-read: **on a deployment with no `ANTHROPIC_API_KEY` set, images and text-free PDFs cannot be read** — everything else works, including PDFs that have a text layer, which is most of them. When it is enabled, the model only transcribes what is drawn: it is instructed never to invent a person, a reporting line or a figure, its rows are flagged for review on the confirm screen, and nothing it produces is treated as a confirmed baseline. Everything else (layout, tagging, protected-role guardrails, cost/span/layer metrics, the scenario move parser) is deterministic by design, per the blueprint skill's mechanism-choice discipline — the model is the reader and the drafter, never the calculator.
 

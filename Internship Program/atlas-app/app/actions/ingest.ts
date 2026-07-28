@@ -24,6 +24,13 @@ export async function ingestFileAction(
   // structure living in a PDF, last year's leavers still in the roster — are
   // not expressible as checkboxes without knowing them in advance.
   const context = String(formData.get("context") ?? "").trim();
+  // The second context window, and a different question entirely. The one
+  // above is about reading the files; this is about the business they
+  // describe — what it earns, what it is trying to reach, what leadership
+  // already suspects. None of it can be read off an export, and without it
+  // Atlas can count managers but cannot say whether a function is overweight,
+  // because there is nothing to be overweight against.
+  const hypothesis = String(formData.get("hypothesis") ?? "").trim();
 
   // Two ways a file can arrive. Normally the browser has already streamed it
   // to /api/upload in chunks and passes the id it was staged under, which is
@@ -73,6 +80,7 @@ export async function ingestFileAction(
       incoming,
       failures,
       context,
+      hypothesis,
       anonymize,
       answers: EMPTY_ANSWERS,
     });

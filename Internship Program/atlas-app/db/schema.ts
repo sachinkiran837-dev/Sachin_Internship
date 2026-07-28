@@ -12,6 +12,18 @@ export const orgs = pgTable("orgs", {
   planJson: text("plan_json"),
   /** JSON IngestAnswers — what the client corrected after seeing the first read. */
   answersJson: text("answers_json"),
+  /**
+   * JSON BusinessContext — the hypothesis layer. What the client said about
+   * the business the establishment belongs to: what it does, what it earns,
+   * what they are trying to reach, and what they already suspect is wrong.
+   *
+   * Kept apart from `ingest_context` because the two are read by different
+   * things at different times. Ingest context decides how the files are bound
+   * and is spent once. This is never read by the ingest at all — it is applied
+   * every time the findings are computed, so changing it re-frames the whole
+   * analysis without re-reading a single file.
+   */
+  businessJson: text("business_json"),
   /** How many times this establishment has been re-read with new answers. */
   revision: integer("revision").notNull().default(0),
 });
