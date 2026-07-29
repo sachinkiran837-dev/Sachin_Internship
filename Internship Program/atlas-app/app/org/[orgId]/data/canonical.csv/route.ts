@@ -20,12 +20,17 @@ export async function GET(
 
   const csv = toCsv(await loadCanonicalTable(orgId));
   const stamp = new Date().toISOString().slice(0, 10);
+  // ASCII only, and no punctuation that would end the quoted string early.
+  // A header value carrying a non-Latin-1 character — an em dash, or an
+  // establishment named from a file with an accent in it — is rejected when
+  // the response is constructed, which turns a download into a 500 with
+  // nothing in it to explain itself.
   const safeName = org.name.replace(/[^a-zA-Z0-9-_ ]/g, "").trim() || "establishment";
 
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${safeName} — canonical ${stamp}.csv"`,
+      "Content-Disposition": `attachment; filename="${safeName} canonical ${stamp}.csv"`,
       // The establishment changes whenever a question is answered, so a
       // cached copy is a wrong copy.
       "Cache-Control": "no-store",
