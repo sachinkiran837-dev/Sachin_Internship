@@ -1,6 +1,7 @@
 import rules from "@/config/comparison-rules.json";
+import spanConfig from "@/config/span-thresholds.json";
 import { tagNodes } from "@/lib/graph/tagging";
-import type { LayoutNode, Position } from "@/lib/graph/types";
+import type { LayoutNode, Position, SpanThresholds } from "@/lib/graph/types";
 import { revenueFor, type BusinessContext } from "@/lib/hypothesis/context";
 
 /**
@@ -40,6 +41,7 @@ export const COMPARISON_OUTLIER_MULTIPLE = OUTLIER_MULTIPLE;
 const MIN_EXCESS_ROLES = rules.minExcessRoles;
 const MIN_COVERAGE = rules.minDimensionCoverage;
 const MIN_COMPARABLE_UNITS = rules.minComparableUnits;
+const SPAN: SpanThresholds = spanConfig;
 
 /**
  * The two ways an establishment can be cut into parts.
@@ -74,6 +76,25 @@ export interface UnitProfile {
   staffPerManager: number | null;
   averageSpan: number;
   layers: number;
+  /**
+   * What is actually producing the management load, counted rather than
+   * characterised.
+   *
+   * "This function is over-managed" is where most redesign conversations stop
+   * and it is the least useful place to stop, because the three things that
+   * produce it want three different responses: teams too small to need their
+   * own lead get merged, relay layers get removed, and a structure that is
+   * simply deep gets compressed. Naming the wrong one produces a change that
+   * costs the same and fixes nothing.
+   */
+  drivers: {
+    /** Managers running fewer people than the healthy range. */
+    thinSpanManagers: number;
+    /** Managers with exactly one report — a layer that relays rather than runs. */
+    singleReportManagers: number;
+    /** Managers running a healthy or wide span, who are not the problem. */
+    healthyManagers: number;
+  };
   agency: number;
   agencyShare: number;
   vacant: number;
@@ -198,6 +219,9 @@ function profile(
   const managers = members.filter((n) => n.childIds.length > 0);
   const depths = members.map((n) => n.depth);
 
+  const thinSpanManagers = managers.filter((n) => n.childIds.length < SPAN.healthyMin).length;
+  const singleReportManagers = managers.filter((n) => n.childIds.length === 1).length;
+
   const headcountShare = totals.headcount === 0 ? 0 : headcount / totals.headcount;
   const costShare = totals.cost === 0 ? 0 : cost / totals.cost;
 
@@ -223,6 +247,11 @@ function profile(
         ? 0
         : managers.reduce((sum, n) => sum + n.childIds.length, 0) / managers.length,
     layers: headcount === 0 ? 0 : Math.max(...depths) - Math.min(...depths) + 1,
+    drivers: {
+      thinSpanManagers,
+      singleReportManagers,
+      healthyManagers: managers.length - thinSpanManagers,
+    },
     agency: members.filter((n) => n.status === "contingent").length,
     agencyShare: headcount === 0 ? 0 : members.filter((n) => n.status === "contingent").length / headcount,
     vacant: members.filter((n) => n.status === "vacant").length,

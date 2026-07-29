@@ -743,11 +743,19 @@ function overlayStructure(
 
   let applied = 0;
   let unresolved = 0;
+  // The cross-check. Where the position list already stated a reporting line
+  // and the chart states one too, the two are compared before the chart's is
+  // taken — otherwise a chart that contradicts payroll on a third of the
+  // organisation is indistinguishable from one that confirms it, and Atlas
+  // would silently overwrite the client's own system with a drawing.
+  let agreed = 0;
+  const conflicts: { who: string; inList: string; onChart: string }[] = [];
 
   f.rows.forEach((row, i) => {
     const target = match.get(i);
     if (!target) return;
 
+    const stated = (target.managerName ?? "").trim();
     const reference = (row.managerName ?? "").trim();
     if (!reference) {
       // The chart's own top role. Clearing the roster's line is what makes it
@@ -772,6 +780,18 @@ function overlayStructure(
       ? (managerRow.positionId ?? "").trim() || (managerRow.name ?? "").trim()
       : (managerRow.name ?? "").trim() || (managerRow.positionId ?? "").trim();
 
+    if (stated) {
+      if (key(stated) === key(value)) {
+        agreed++;
+      } else if (conflicts.length < 200) {
+        conflicts.push({
+          who: (target.name ?? "").trim() || (target.title ?? "").trim() || (target.positionId ?? "").trim(),
+          inList: stated,
+          onChart: value || reference,
+        });
+      }
+    }
+
     target.managerName = value || reference;
     applied++;
   });
@@ -785,6 +805,47 @@ function overlayStructure(
   }
   if (added > 0) {
     for (const extra of f.extras) if (!coreExtras.includes(extra)) coreExtras.push(extra);
+  }
+
+  // Where both documents state a reporting line, they are compared rather
+  // than one being silently preferred. Agreement is worth saying out loud —
+  // it is the strongest evidence the structure is right that Atlas can
+  // produce, because two systems built by different people agree. And
+  // disagreement is a finding in its own right, not a merge conflict: a chart
+  // and a payroll that differ on who someone reports to differ about how the
+  // organisation actually runs.
+  if (agreed + conflicts.length > 0) {
+    const checked = agreed + conflicts.length;
+    const rate = (agreed / checked) * 100;
+    notes.push(
+      conflicts.length === 0
+        ? note("structure-crosscheck", "assumption", {
+            topic: "Structure cross-checked",
+            statement:
+              `Every reporting line stated in both "${f.filename}" and the position lists agrees. The structure ` +
+              `on the map is confirmed by two independent sources, not taken from one.`,
+            evidence: `${agreed.toLocaleString()} reporting line${agreed === 1 ? "" : "s"} appear in both documents, and all of them match.`,
+            effect: `Spans, layers and every comparison built on them rest on a structure two of your systems agree about.`,
+          })
+        : note("structure-crosscheck", "question", {
+            topic: "Structure cross-checked",
+            statement:
+              `"${f.filename}" and your position lists disagree about who ${conflicts.length.toLocaleString()} ` +
+              `${conflicts.length === 1 ? "person reports" : "people report"} to. Atlas used the chart and has not reconciled them.`,
+            evidence:
+              `${checked.toLocaleString()} reporting lines are stated in both documents. ${agreed.toLocaleString()} match ` +
+              `(${rate.toFixed(0)}%). The rest differ, for example: ` +
+              conflicts
+                .slice(0, 3)
+                .map((c) => `${c.who || "a role"} reports to "${c.onChart}" on the chart and "${c.inList}" in the list`)
+                .join("; ") +
+              `.`,
+            effect:
+              `Spans of control and layer counts follow the chart wherever the two differ, so ${conflicts.length.toLocaleString()} ` +
+              `${conflicts.length === 1 ? "line is" : "lines are"} drawn from the older or newer of two accounts without anyone ` +
+              `deciding which. Say which document is current below and Atlas will read the files again with that settled.`,
+          })
+    );
   }
 
   // The chart and the spreadsheets are two accounts of one organisation, and
@@ -830,6 +891,9 @@ function overlayStructure(
       `Used for its shape, not its people: ${matched} of its ${f.rows.length} role${f.rows.length === 1 ? "" : "s"} ` +
       `were matched to the establishment and ${applied} reporting line${applied === 1 ? "" : "s"} taken from it, ` +
       `replacing whatever the position list said.` +
+      (agreed + conflicts.length > 0
+        ? ` Of the ${agreed + conflicts.length} lines both documents state, ${agreed} agree and ${conflicts.length} do not.`
+        : "") +
       (added > 0
         ? ` ${added} role${added === 1 ? " was" : "s were"} on the chart but not in the position list, and ${added === 1 ? "was" : "were"} added.`
         : "") +

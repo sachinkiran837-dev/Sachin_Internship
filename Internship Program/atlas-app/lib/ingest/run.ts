@@ -9,6 +9,7 @@ import type { IngestNote } from "./notes";
 import type { IngestAnswers } from "./answers";
 import type { Position } from "@/lib/graph/types";
 import { unitNames } from "@/lib/analysis/functions";
+import { cleanRows, cleaningNote } from "@/lib/canonical/clean";
 import { readBusinessContext } from "@/lib/hypothesis/read";
 import { EMPTY_BUSINESS } from "@/lib/hypothesis/context";
 import {
@@ -17,6 +18,7 @@ import {
   getBaselineRootId,
   saveAnswers,
   saveBusinessContext,
+  saveCleaningLedger,
   saveIssues,
   saveNotes,
   savePositions,
@@ -155,6 +157,14 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   // One file binds to itself, so this path is the same for one upload or ten.
   const bound = bindFiles(sources, plan, answers);
 
+  // The scrub, between binding and building. It runs here rather than per
+  // file because a totals row is only recognisable once the columns have been
+  // named — before that it is a row like any other with a number in it — and
+  // because one ledger for the whole upload is what a person can actually
+  // read, rather than one per file saying nothing much each.
+  const { rows: cleanedRows, ledger } = cleanRows(bound.rows);
+  bound.rows = cleanedRows;
+
   if (bound.rows.length === 0) {
     // Every reason, not just the first — if four files failed for four
     // different reasons, one error message naming one of them sends the user
@@ -203,10 +213,17 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   // merged result.
   await saveSourceFiles(orgId, bound.bindings);
 
+  // Kept because it is the one thing on the canonical-table screen that
+  // cannot be re-derived: the saved establishment is what survived the scrub,
+  // and says nothing about what didn't.
+  await saveCleaningLedger(orgId, ledger);
+
   // Everything Atlas assumed, and everything it refused to assume. The
   // vocabulary check runs last of all because it needs the files bound
   // together to see that two of them disagree.
   const notes: IngestNote[] = [...(bound.notes ?? []), ...graphNotes];
+  const scrubbed = cleaningNote(ledger);
+  if (scrubbed) notes.push(scrubbed);
   const merged = appliedMapping(bound, answers, revised !== null);
   if (merged) notes.push(merged);
   const vocabulary = await reconcileGroups(bound, answers);

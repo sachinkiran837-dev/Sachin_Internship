@@ -8,6 +8,7 @@ import {
   productivitySpread,
   type FunctionAnalysis,
   type UnitComparison,
+  type UnitProfile,
 } from "@/lib/analysis/functions";
 import { analyseAllPlays, type PlayAnalysis, type PlayMeta } from "@/lib/scenario/plays";
 import { computeMetrics } from "@/lib/metrics/diagnostics";
@@ -186,6 +187,59 @@ function rank(a: Hypothesis, b: Hypothesis): number {
 
 type FindPlay = (id: string) => { play: PlayMeta; analysis: PlayAnalysis } | null;
 
+/**
+ * What is producing a unit's management load, and therefore what to do about
+ * it.
+ *
+ * The three causes want three different responses and cost the same to get
+ * wrong. Teams too small to justify their own lead are merged; managers with
+ * a single report are a relay layer and are removed; a unit whose managers
+ * all run healthy spans is not over-managed by span at all — it is deep, and
+ * the answer is compression. Picking the dominant one is what turns "this
+ * function is bloated" into an instruction.
+ */
+function driverOf(unit: UnitProfile): { driver: string; action: string; playId: string } {
+  const { thinSpanManagers, singleReportManagers, healthyManagers } = unit.drivers;
+
+  if (singleReportManagers > 0 && singleReportManagers >= thinSpanManagers / 2) {
+    return {
+      driver:
+        `${singleReportManagers} of ${unit.key}'s ${unit.managers} management roles have exactly one direct ` +
+        `report. That is not a team being run, it is a decision being relayed, and it is the clearest ` +
+        `cause here.`,
+      action:
+        `Take the single-report roles first: ask what each one decides that the level above it does not, ` +
+        `and where the answer is nothing, move the report up a level and close the post. Nothing below ` +
+        `them changes, which makes this the lowest-risk move available.`,
+      playId: "pass-through-layers",
+    };
+  }
+
+  if (thinSpanManagers > 0) {
+    return {
+      driver:
+        `${thinSpanManagers} of ${unit.key}'s ${unit.managers} managers run a team smaller than the healthy ` +
+        `range. The load is coming from teams too small to need a lead of their own, not from the layer count.`,
+      action:
+        `Merge the sub-scale teams into the nearest one doing related work and keep every person in them. ` +
+        `What goes is the separate management post, not the team — check the receiving manager stays inside ` +
+        `a healthy span before committing to it.`,
+      playId: "thin-span-consolidation",
+    };
+  }
+
+  return {
+    driver:
+      `All ${healthyManagers} of ${unit.key}'s managers run a healthy span, so the load is not coming from ` +
+      `teams that are too small. It is coming from depth — ${unit.layers} layers inside one ${"unit"}.`,
+    action:
+      `Compress rather than consolidate: take the longest chain from the front line to the top of ` +
+      `${unit.key} and remove the step that adds no decision. Merging teams here would make healthy spans ` +
+      `wide without removing a layer.`,
+    playId: "deep-chain-compression",
+  };
+}
+
 function managementLoad(comparison: UnitComparison, findPlay: FindPlay): Hypothesis[] {
   const outliers = managementOutliers(comparison);
   if (outliers.length === 0) return [];
@@ -197,7 +251,8 @@ function managementLoad(comparison: UnitComparison, findPlay: FindPlay): Hypothe
   // The two worst, not all of them. A list of nine "bloated" functions is a
   // list nobody reads and a claim nobody believes.
   return outliers.slice(0, 2).map(({ unit, excessManagers, excessCost, costBasis }) => {
-    const play = findPlay(unit.managerShare > 0 ? "manager-ratio" : "thin-span-consolidation");
+    const { driver, action, playId } = driverOf(unit);
+    const play = findPlay(playId) ?? findPlay("manager-ratio");
 
     return {
       id: `management-load:${unit.key}`,
@@ -210,7 +265,8 @@ function managementLoad(comparison: UnitComparison, findPlay: FindPlay): Hypothe
         `Two things usually produce that gap and they need different responses: the work is genuinely ` +
         `more supervision-intensive than the rest of the group, or the layer was added to solve a ` +
         `problem that has since been solved and never taken back out. The structure alone cannot tell ` +
-        `you which — but it can tell you the gap is ${excessManagers} role${excessManagers === 1 ? "" : "s"} wide.`,
+        `you which — but it can tell you the gap is ${excessManagers} role${excessManagers === 1 ? "" : "s"} wide, ` +
+        `and it can tell you what is producing it. ${driver}`,
       signals: [
         {
           label: "Management share",
@@ -223,13 +279,17 @@ function managementLoad(comparison: UnitComparison, findPlay: FindPlay): Hypothe
           comparison: `median ${(medianStaff ?? 0).toFixed(1)}`,
         },
         { label: "Average span inside the unit", value: unit.averageSpan.toFixed(1) },
+        {
+          label: "Managers running a sub-scale team",
+          value: `${unit.drivers.thinSpanManagers} of ${unit.managers}`,
+          comparison: `${unit.drivers.singleReportManagers} of them have exactly one report`,
+        },
+        { label: "Layers inside the unit", value: String(unit.layers) },
         { label: "Size", value: `${unit.headcount} positions, ${unit.fte.toFixed(0)} FTE` },
       ],
       action:
-        `Ask what each of those ${unit.managers} management roles decides that the layer above or below ` +
-        `it could not. Where the answer is nothing, the role is a relay, and consolidating it widens the ` +
-        `span above without changing who does the work. Model it before you commit to it — the ` +
-        `${play?.play.name ?? "manager-ratio"} play finds the specific roles and prices them.`,
+        `${action} Model it before you commit to it — the ${play?.play.name ?? "manager-ratio"} play finds ` +
+        `the specific roles and prices them.`,
       playId: play?.play.id ?? null,
       playName: play?.play.name ?? null,
       prize: {

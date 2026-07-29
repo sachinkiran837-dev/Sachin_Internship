@@ -3,6 +3,7 @@ import Link from "next/link";
 export function OrgNav({ orgId, active }: { orgId: string; active: string }) {
   const tabs = [
     { key: "confirm", label: "Confirm ingest", href: `/org/${orgId}` },
+    { key: "data", label: "Canonical table", href: `/org/${orgId}/data` },
     { key: "context", label: "Business context", href: `/org/${orgId}/context` },
     { key: "map", label: "Establishment map", href: `/org/${orgId}/map` },
     { key: "findings", label: "Findings", href: `/org/${orgId}/findings` },

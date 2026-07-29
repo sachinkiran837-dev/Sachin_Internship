@@ -165,9 +165,44 @@ Each of these creates real establishments in the real database, so the home page
 
 `verify-corrections.ts` is the round trip the register depends on. It ingests two files that between them hold every refusal Atlas can make — hourly rates with no hours, one brand vocabulary in codes and another in full names — checks that nobody is priced and both questions are raised with a proposal attached, then answers them exactly as the confirm screen does: accepting Atlas's pairing for one value and correcting by hand the one it declined to pair. It asserts the re-read keeps the establishment's id, prices every position at the client's stated hours, merges the reconciled codes so no group survives twice, flips the answered question into an assumption naming the client, drops the reconciled one entirely, and stores the answers for the next re-read.
 
-`verify-hypotheses.ts` covers the hypothesis layer and the function comparison, in memory and without a key — see below for what its central case is and why it is built the way it is.
+`verify-canonical.ts` covers the scrub and the canonical table; `verify-hypotheses.ts` covers the hypothesis layer and the function comparison. Both run in memory, without a database, network or key — see below for what its central case is and why it is built the way it is.
 
 `verify-plays.ts` is the one that keeps the numbers honest: for every play it replays the play's own operations against the diagnostic engine and fails if the claimed saving doesn't equal the sum of the roles it named, if the modelled cost didn't actually move, or if the predicted headcount delta doesn't match what happened.
+
+## The canonical table
+
+Every file eventually becomes one table, and the engine reasons about nothing else. One row per person, and the six things a redesign turns on:
+
+| Employee | Department | Brand | Manager | Employment type | Salary |
+|---|---|---|---|---|---|
+
+Plus job title (a name alone doesn't identify a role), FTE (the number behind the employment word), annual cost (salary × FTE — carried because it is what every saving downstream is computed from, and a table whose figures don't reconcile to the map's total starts an argument), and a per-row note saying what was missing or inferred.
+
+It lives on the **Canonical table** tab with a CSV download, and it is **derived from the saved establishment rather than stored beside it**. A second copy of the same facts is a second copy that can disagree with the first: correct a paid-hours figure and the positions change while an exported table quietly keeps last week's salaries. Deriving it means the file someone downloads on Friday is the establishment as it stood on Friday, with no reconciliation step anyone has to remember to run.
+
+Two distinctions the table is careful about, because both look identical in a spreadsheet and mean opposite things:
+
+- **A column that was never supplied vs. a cell nobody filled in.** "No department column reached this establishment" and "no department recorded against this row" are different problems with different fixes, so the row says which. Coverage bars at the top of the page report it per column — on the Kinyara data, department reaches 19% and manager 19%, which is exactly why the findings screen can't compare functions on management load.
+- **Being the top of a brand vs. having had no manager stated.** Both report into a heading node. Only one is a fact about the organisation; the other is a row the graph builder had nowhere else to put. Calling four hundred care workers "top of AgeUp" would be four hundred lies in a column that has to be trusted.
+
+### The scrub, and its ledger
+
+Real exports carry things that are not data: a totals row at the bottom, `#REF!` where a formula broke, `N/A` typed four different ways, blank rows left by whoever deleted the leavers. Each becomes a person if it isn't caught — a "Grand Total" with a $4.2m salary sitting in the establishment as an employee, inflating headcount by one and cost by a fifth.
+
+`lib/canonical/clean.ts` removes them under two rules.
+
+**Removal is never silent.** Deleting rows from a client's data is the most dangerous thing Atlas does, because the result looks perfect — a clean map with no sign that eleven people are missing. Everything dropped is counted, categorised and shown back *with the actual rows*, on the confirm screen before the map and again above the table itself, so the rule can be checked rather than trusted.
+
+**Only unambiguous garbage goes.** A row with a name and no salary is incomplete, not garbage, and it stays — the establishment is meant to show the salary is missing. What goes is a row that cannot describe a person (nothing in the name, title or ID) or that describes a spreadsheet artefact (a totals line, an entirely empty row). Placeholder text is matched on the whole trimmed cell and never as a substring: `NA` is a placeholder, `NA Region Manager` is a job. Case is deliberately left alone — an ALL-CAPS surname is how the client's system holds it, and rewriting it would be Atlas editing their records rather than reading them.
+
+`scripts/verify-canonical.ts` runs the checks in both directions, because garbage that survives is a bug and a real person removed is a worse one. It also pins the Excel guard: a value opening with `=`, `+`, `-` or `@` is neutralised, because client data holds job titles like `-Vacant-` and a CSV that opens on a formula error is a CSV nobody trusts.
+
+### Cross-checking the structure
+
+When the upload includes a chart *and* position lists, both state reporting lines. Atlas takes the chart's — but no longer silently. Every line stated in both documents is compared first, and the result is reported either way:
+
+- **They agree.** Worth saying out loud: it is the strongest evidence the structure is right that Atlas can produce, because two systems built by different people concur.
+- **They disagree.** A finding in its own right, not a merge conflict. A chart and a payroll that differ about who someone reports to differ about how the organisation runs. Atlas names the count, the agreement rate and three examples, says it used the chart, and asks which document is current — because deciding that is the client's call, not a reader's.
 
 ## The hypothesis layer, and the three questions
 

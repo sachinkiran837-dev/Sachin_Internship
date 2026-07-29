@@ -18,6 +18,7 @@ import type { IngestPlan } from "@/lib/ingest/plan";
 import type { IngestNote } from "@/lib/ingest/notes";
 import { parseAnswers, type IngestAnswers } from "@/lib/ingest/answers";
 import { parseBusinessContext, type BusinessContext } from "@/lib/hypothesis/context";
+import { EMPTY_LEDGER, type CleaningLedger } from "@/lib/canonical/clean";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -249,6 +250,22 @@ export async function hasSourceBlobs(orgId: string): Promise<boolean> {
 export async function getAnswers(orgId: string): Promise<IngestAnswers> {
   const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
   return parseAnswers(rows[0]?.answersJson ?? null);
+}
+
+/** What the scrub threw away on the run that built this establishment. */
+export async function getCleaningLedger(orgId: string): Promise<CleaningLedger> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  const raw = rows[0]?.cleaningJson;
+  if (!raw) return EMPTY_LEDGER;
+  try {
+    return JSON.parse(raw) as CleaningLedger;
+  } catch {
+    return EMPTY_LEDGER;
+  }
+}
+
+export async function saveCleaningLedger(orgId: string, ledger: CleaningLedger): Promise<void> {
+  await db.update(orgs).set({ cleaningJson: JSON.stringify(ledger) }).where(eq(orgs.id, orgId));
 }
 
 /** The hypothesis layer: what the client said about the business itself. */

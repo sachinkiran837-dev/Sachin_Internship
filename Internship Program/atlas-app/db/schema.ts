@@ -24,6 +24,17 @@ export const orgs = pgTable("orgs", {
    * analysis without re-reading a single file.
    */
   businessJson: text("business_json"),
+  /**
+   * JSON CleaningLedger — what was thrown away between the raw files and the
+   * establishment, and why.
+   *
+   * The only part of the ingest that cannot be recovered by looking at the
+   * result: the saved positions are what survived the scrub and say nothing
+   * about what didn't. Removing rows from a client's data is the most
+   * dangerous thing Atlas does precisely because the outcome looks perfect,
+   * so the record of it outlives the run that made it.
+   */
+  cleaningJson: text("cleaning_json"),
   /** How many times this establishment has been re-read with new answers. */
   revision: integer("revision").notNull().default(0),
 });
