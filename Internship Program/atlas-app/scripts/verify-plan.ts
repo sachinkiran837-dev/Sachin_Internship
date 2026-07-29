@@ -18,7 +18,7 @@ import { computeMetrics } from "../lib/metrics/diagnostics";
 import { EMPTY_PLAN_ANSWERS, planIngest, validatePlan, type IngestPlan } from "../lib/ingest/plan";
 import { remove, reassign } from "../lib/scenario/moves";
 import { getBaselineRootId } from "../db/repo";
-import { hasAI } from "../lib/ai/client";
+import { hasAI, providerLabel } from "../lib/ai/client";
 import type { ParsedFile } from "../lib/ingest/parseFile";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -332,13 +332,13 @@ async function main() {
   ]);
   if (hasAI()) {
     assert(unplanned?.source === "ai", "with a key configured the planner should return a real plan");
-    console.log(`\n8. ANTHROPIC_API_KEY is set — planner returned a live plan from ${unplanned?.model}.`);
+    console.log(`\n8. ${providerLabel()} is configured — planner returned a live plan from ${unplanned?.model}.`);
     console.log(`   notes: ${unplanned?.notes}`);
     console.log(`   groupBy: ${JSON.stringify(unplanned?.groupBy)}`);
   } else {
     assert(unplanned?.source === "unavailable", `without a key the plan must say so: got ${unplanned?.source}`);
     assert(unplanned.groupBy === null && unplanned.files.length === 0, "an unread instruction must change nothing");
-    assert(unplanned.notes.includes("ANTHROPIC_API_KEY"), "the reason must name the missing key");
+    assert(unplanned.notes.includes("no AI key"), "the reason must name the missing key");
     console.log(`\n8. No key: instructions recorded, applied to nothing, and the reason is stated —`);
     console.log(`   "${unplanned.notes.slice(0, 108)}…"`);
   }

@@ -1,4 +1,4 @@
-import { AI_MODEL, getAnthropicClient, hasAI } from "@/lib/ai/client";
+import { ask, hasAI } from "@/lib/ai/client";
 import { CANONICAL_FIELDS } from "@/lib/graph/types";
 import type { ParsedFile } from "./parseFile";
 import { COMPOSED_COST, COMPOSED_NAME } from "./composeColumns";
@@ -204,9 +204,9 @@ export async function planIngest(
       rowFilter: null,
       answers: EMPTY_PLAN_ANSWERS,
       notes:
-        "Your instructions were recorded but not applied. Reading them takes the Anthropic API, " +
-        "and this deployment has no ANTHROPIC_API_KEY set, so the files were bound by their column " +
-        "names alone — exactly as they would have been with the box left empty. Nothing was guessed at.",
+        "Your instructions were recorded but not applied. Reading them takes a model, and this " +
+        "deployment has no AI key set, so the files were bound by their column names alone — " +
+        "exactly as they would have been with the box left empty. Nothing was guessed at.",
       warnings: [],
       source: "unavailable",
       model: null,
@@ -214,36 +214,26 @@ export async function planIngest(
   }
 
   try {
-    const client = getAnthropicClient();
-    const response = await client.messages.create({
-      model: AI_MODEL,
+    const answer = await ask({
       // A plan for a folder of ten files, each with forty columns, is a long
       // object — and a plan cut off mid-object is not a smaller plan, it is
       // no plan at all. This ceiling is set well above any real one so that
       // running out of room is a bug rather than a Tuesday.
-      max_tokens: 16000,
+      maxTokens: 16000,
       system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content:
-            `The person uploading these files says:\n\n"""\n${instruction}\n"""\n\n` +
-            `Here is what actually arrived.\n\n${files.map(digest).join("\n\n")}\n\n` +
-            (prior ? `${priorDigest(prior)}\n\n` : "") +
-            `Return the plan as JSON.`,
-        },
-      ],
+      prompt:
+        `The person uploading these files says:\n\n"""\n${instruction}\n"""\n\n` +
+        `Here is what actually arrived.\n\n${files.map(digest).join("\n\n")}\n\n` +
+        (prior ? `${priorDigest(prior)}\n\n` : "") +
+        `Return the plan as JSON.`,
     });
 
-    const text = response.content
-      .map((block) => (block.type === "text" ? block.text : ""))
-      .join("")
-      .trim();
+    const text = answer.text;
 
     // A truncated plan and a malformed one look identical by the time they
     // reach the parser, and they call for completely different responses —
     // so the one case that can be told apart is told apart here.
-    if (response.stop_reason === "max_tokens") {
+    if (answer.truncated) {
       return {
         files: [],
         groupBy: null,
@@ -256,11 +246,11 @@ export async function planIngest(
           `files at once, or narrowing the instructions, will get them read.`,
         warnings: [],
         source: "failed",
-        model: response.model,
+        model: answer.model,
       };
     }
 
-    return validatePlan(text, files, response.model);
+    return validatePlan(text, files, answer.model);
   } catch (err) {
     return {
       files: [],

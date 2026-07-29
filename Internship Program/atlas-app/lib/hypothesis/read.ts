@@ -1,4 +1,4 @@
-import { AI_MODEL, getAnthropicClient, hasAI } from "@/lib/ai/client";
+import { ask, hasAI, providerLabel } from "@/lib/ai/client";
 import {
   EMPTY_BUSINESS,
   type Belief,
@@ -173,39 +173,30 @@ export async function readBusinessContext(
       raw: text,
       source: "none",
       unmatched: [
-        "Atlas kept what you wrote but could not read figures out of it — the model that does that reading is not configured. Everything below is computed from your files alone.",
+        "Atlas kept what you wrote but could not read figures out of it — this deployment has no AI key set, so there is nothing to do the reading. Everything below is computed from your files alone.",
       ],
     };
   }
 
   try {
-    const message = await getAnthropicClient().messages.create(
-      {
-        model: AI_MODEL,
-        max_tokens: 4000,
-        tools: [CONTEXT_TOOL],
-        tool_choice: { type: "tool", name: CONTEXT_TOOL.name },
-        messages: [
-          {
-            role: "user",
-            content:
-              `A client has described their organisation ahead of a restructure review. Record the business ` +
-              `facts they stated.\n\n` +
-              `Rules:\n` +
-              `1. Extract only what they said. Never infer a revenue figure, a target or a belief they did not state.\n` +
-              `2. Never calculate. If they give revenue and you know the headcount, do not compute revenue per head — that is done elsewhere from the establishment data.\n` +
-              `3. Every "unit" must be copied exactly from the list below, or left as an empty string. If they name a part of the business that is not on the list, put it in "unmatched" instead of guessing which one they meant.\n` +
-              `4. A statement can be both a belief and a target. Record it in both.\n` +
-              `5. Quote their own words in "statedAs" — do not paraphrase. The client will see these quoted back.\n\n` +
-              `Units in this establishment:\n${units.map((u) => `- ${u}`).join("\n") || "- (none identified)"}\n\n` +
-              `What the client wrote:\n"""\n${text}\n"""`,
-          },
-        ],
-      },
-      { timeout: 30_000 }
-    );
+    const answer = await ask({
+      maxTokens: 4000,
+      timeoutMs: 30_000,
+      tool: CONTEXT_TOOL,
+      prompt:
+        `A client has described their organisation ahead of a restructure review. Record the business ` +
+        `facts they stated.\n\n` +
+        `Rules:\n` +
+        `1. Extract only what they said. Never infer a revenue figure, a target or a belief they did not state.\n` +
+        `2. Never calculate. If they give revenue and you know the headcount, do not compute revenue per head — that is done elsewhere from the establishment data.\n` +
+        `3. Every "unit" must be copied exactly from the list below, or left as an empty string. If they name a part of the business that is not on the list, put it in "unmatched" instead of guessing which one they meant.\n` +
+        `4. A statement can be both a belief and a target. Record it in both.\n` +
+        `5. Quote their own words in "statedAs" — do not paraphrase. The client will see these quoted back.\n\n` +
+        `Units in this establishment:\n${units.map((u) => `- ${u}`).join("\n") || "- (none identified)"}\n\n` +
+        `What the client wrote:\n"""\n${text}\n"""`,
+    });
 
-    if (message.stop_reason === "max_tokens") {
+    if (answer.truncated) {
       return {
         ...EMPTY_BUSINESS,
         raw: text,
@@ -216,18 +207,17 @@ export async function readBusinessContext(
       };
     }
 
-    const toolUse = message.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
+    if (answer.toolInput === null) {
       return { ...EMPTY_BUSINESS, raw: text, source: "none" };
     }
 
-    return validate(toolUse.input as RawContext, text, units);
+    return validate(answer.toolInput as RawContext, text, units);
   } catch (err) {
     return {
       ...EMPTY_BUSINESS,
       raw: text,
       source: "none",
-      unmatched: [`Atlas could not read figures out of what you wrote: ${(err as Error).message}`],
+      unmatched: [`Atlas could not read figures out of what you wrote — ${providerLabel()} returned: ${(err as Error).message}`],
     };
   }
 }

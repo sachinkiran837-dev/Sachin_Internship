@@ -1,4 +1,4 @@
-import { AI_MODEL, getAnthropicClient, hasAI } from "@/lib/ai/client";
+import { ask, hasAI } from "@/lib/ai/client";
 import type { BoundDataset } from "./bindFiles";
 import { note, type IngestNote, type NoteOption } from "./notes";
 import type { IngestAnswers } from "./answers";
@@ -137,30 +137,22 @@ async function proposeMapping(
   if (!hasAI()) return fallback();
 
   try {
-    const message = await getAnthropicClient().messages.create({
-      model: AI_MODEL,
-      max_tokens: 2000,
-      tools: [MAPPING_TOOL],
-      tool_choice: { type: "tool", name: MAPPING_TOOL.name },
-      messages: [
-        {
-          role: "user",
-          content:
-            `Two systems in one company record the same "${label}" dimension with different value sets. ` +
-            `Pair each value in the first list with the value in the second list that names the same thing. ` +
-            `They are commonly an abbreviation and its full form, or the same name punctuated differently. ` +
-            `Return an empty "to" for any value with no counterpart — a wrong pairing is worse than none, ` +
-            `because it merges two real parts of the organisation into one.\n\n` +
-            `First list:\n${orphans.map((v) => `- ${v}`).join("\n")}\n\n` +
-            `Second list:\n${candidates.map((v) => `- ${v}`).join("\n")}`,
-        },
-      ],
+    const answer = await ask({
+      maxTokens: 2000,
+      tool: MAPPING_TOOL,
+      prompt:
+        `Two systems in one company record the same "${label}" dimension with different value sets. ` +
+        `Pair each value in the first list with the value in the second list that names the same thing. ` +
+        `They are commonly an abbreviation and its full form, or the same name punctuated differently. ` +
+        `Return an empty "to" for any value with no counterpart — a wrong pairing is worse than none, ` +
+        `because it merges two real parts of the organisation into one.\n\n` +
+        `First list:\n${orphans.map((v) => `- ${v}`).join("\n")}\n\n` +
+        `Second list:\n${candidates.map((v) => `- ${v}`).join("\n")}`,
     });
 
-    const toolUse = message.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") return fallback();
+    if (answer.toolInput === null) return fallback();
 
-    const { pairs } = toolUse.input as { pairs?: { from: string; to: string }[] };
+    const { pairs } = answer.toolInput as { pairs?: { from: string; to: string }[] };
     const byFrom = new Map((pairs ?? []).map((p) => [p.from, p.to] as const));
 
     return {

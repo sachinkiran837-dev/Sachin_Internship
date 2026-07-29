@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DiagnosticMetrics, Finding, FindingsResult } from "@/lib/graph/types";
-import { hasAI, getAnthropicClient, AI_MODEL } from "@/lib/ai/client";
+import { ask, hasAI } from "@/lib/ai/client";
 
 const MAX_FINDINGS = 5;
 
@@ -141,40 +141,28 @@ export async function generateNarrative(
       : `Findings: ${JSON.stringify(findings.map((f) => ({ headline: f.headline, soWhat: f.soWhat })))}`;
 
   try {
-    const client = getAnthropicClient();
-    const message = await client.messages.create(
-      {
-        model: AI_MODEL,
-        max_tokens: 400,
-        messages: [
-          {
-            role: "user",
-            content:
-              `You are writing a short narrative for a Project Partner to read out to a client, framing ` +
-              `an already-computed operating-model analysis. Do not invent or recompute any number — only ` +
-              `reference the figures given. Every claim must be traceable to what follows.\n\n` +
-              `Metrics: ${JSON.stringify({
-                headcount: metrics.headcount,
-                totalFte: metrics.totalFte,
-                contingentCount: metrics.contingentCount,
-                totalCost: metrics.totalCost,
-                layers: metrics.layers,
-                averageSpan: metrics.averageSpan,
-                protectedCount: metrics.protectedCount,
-              })}\n\n${material}\n\n` +
-              `Write 2-4 sentences, plain language, no bullet points. Lead with what the analysis thinks ` +
-              `is happening rather than with a count of positions. Where a client belief was tested and ` +
-              `not supported, say so — that is the most useful sentence on the page.`,
-          },
-        ],
-      },
-      { timeout: NARRATIVE_TIMEOUT_MS }
-    );
+    const answer = await ask({
+      maxTokens: 400,
+      timeoutMs: NARRATIVE_TIMEOUT_MS,
+      prompt:
+        `You are writing a short narrative for a Project Partner to read out to a client, framing ` +
+        `an already-computed operating-model analysis. Do not invent or recompute any number — only ` +
+        `reference the figures given. Every claim must be traceable to what follows.\n\n` +
+        `Metrics: ${JSON.stringify({
+          headcount: metrics.headcount,
+          totalFte: metrics.totalFte,
+          contingentCount: metrics.contingentCount,
+          totalCost: metrics.totalCost,
+          layers: metrics.layers,
+          averageSpan: metrics.averageSpan,
+          protectedCount: metrics.protectedCount,
+        })}\n\n${material}\n\n` +
+        `Write 2-4 sentences, plain language, no bullet points. Lead with what the analysis thinks ` +
+        `is happening rather than with a count of positions. Where a client belief was tested and ` +
+        `not supported, say so — that is the most useful sentence on the page.`,
+    });
 
-    const text = message.content.find((b) => b.type === "text");
-    const narrative = text && text.type === "text" ? text.text.trim() : fallback;
-
-    return { narrative: narrative || fallback, findings, followups, source: "ai" };
+    return { narrative: answer.text || fallback, findings, followups, source: "ai" };
   } catch {
     return { narrative: fallback, findings, followups, source: "fallback" };
   }

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
  * concluded, next to everything it was asked for and could not do.
  *
  * It also has to be honest about not having read them at all — a deployment
- * with no ANTHROPIC_API_KEY still accepts the instructions, and must say
+ * with no AI key still accepts the instructions, and must say
  * plainly that they were recorded and ignored rather than letting a
  * well-formed map imply they were followed.
  */

@@ -84,8 +84,8 @@ async function readPdf(filename: string, buffer: Buffer): Promise<ParsedFile> {
     if (!hasAI()) {
       throw new UnsupportedFileError(
         `${(err as Error).message} Atlas read the file itself rather than refusing it, and there was no table in it to take. ` +
-          `Reading a drawn chart or a scan needs the vision model, which this deployment has no ANTHROPIC_API_KEY for. ` +
-          `Either set that key, or export the underlying data as CSV or Excel — the numbers behind the chart, not the picture of it.`
+          `Reading a drawn chart or a scan needs a vision model, and this deployment has no AI key set. ` +
+          `Either set OPENAI_API_KEY or ANTHROPIC_API_KEY, or export the underlying data as CSV or Excel — the numbers behind the chart, not the picture of it.`
       );
     }
 

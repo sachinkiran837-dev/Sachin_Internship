@@ -4,7 +4,7 @@
  * it. The image/PDF path is exercised as far as it can be without spending
  * an API call — its refusal message when no key is configured is itself a
  * behaviour worth pinning, since that is what a client sees on a deployment
- * with no ANTHROPIC_API_KEY.
+ * with no AI key set.
  *
  * Run with `npx tsx --env-file=.env.local scripts/verify-formats.ts`.
  */
@@ -17,7 +17,7 @@ import { UnsupportedFileError } from "../lib/ingest/parseFile";
 import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
 import { buildOrgGraph } from "../lib/ingest/buildGraph";
 import { computeMetrics } from "../lib/metrics/diagnostics";
-import { hasAI } from "../lib/ai/client";
+import { hasAI, providerLabel } from "../lib/ai/client";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`);
@@ -147,13 +147,13 @@ async function main() {
   assert(formatFor("board-pack.pdf")?.kind === "visual", "a .pdf must route to the vision reader");
 
   if (hasAI()) {
-    console.log("3. Images → ANTHROPIC_API_KEY is set; skipping the live vision call.");
+    console.log(`3. Images → ${providerLabel()} is configured; skipping the live vision call.`);
   } else {
     const imageError = await readSourceFile("org-chart.png", png).catch((e: Error) => e);
     assert(imageError instanceof UnsupportedFileError, "a refused image must be an UnsupportedFileError");
     const msg = (imageError as Error).message;
     assert(
-      msg.includes("ANTHROPIC_API_KEY") && msg.includes("CSV"),
+      msg.includes("no AI key") && msg.includes("CSV"),
       `the refusal must name the missing key and the way round it: ${msg}`
     );
     console.log(`3. Images (no key) → refused, and says why: ${msg.slice(0, 72)}…`);

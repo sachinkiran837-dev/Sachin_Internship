@@ -1,4 +1,4 @@
-import { AI_MODEL, getAnthropicClient, hasAI } from "@/lib/ai/client";
+import { ask, hasAI } from "@/lib/ai/client";
 import { formatFor } from "./formats";
 import { UnsupportedFileError, type ParsedFile } from "./parseFile";
 
@@ -17,7 +17,7 @@ import { UnsupportedFileError, type ParsedFile } from "./parseFile";
  * A transcribed chart is a starting point for a conversation with the client,
  * not a baseline to model savings off unchecked.
  *
- * Without an ANTHROPIC_API_KEY there is no deterministic fallback that could
+ * Without an AI key there is no deterministic fallback that could
  * honestly read a picture, so the file is refused with a reason rather than
  * half-read — the visible-fallback pattern applied to a behaviour that has no
  * fallback.
@@ -75,9 +75,9 @@ export async function parseVisualFile(filename: string, buffer: Buffer): Promise
 
   if (!hasAI()) {
     throw new UnsupportedFileError(
-      `Atlas reads org charts out of images and PDFs with a vision model, and no ANTHROPIC_API_KEY is configured on this deployment, ` +
+      `Atlas reads org charts out of images and PDFs with a vision model, and no AI key is configured on this deployment, ` +
         `so "${filename}" could not be read. Everything else about Atlas works without it — but a picture has no deterministic fallback. ` +
-        `Either set the key, or export the chart from its source system as CSV or Excel.`
+        `Either set OPENAI_API_KEY or ANTHROPIC_API_KEY, or export the chart from its source system as CSV or Excel.`
     );
   }
 
@@ -126,48 +126,30 @@ export async function parseVisualFile(filename: string, buffer: Buffer): Promise
 }
 
 async function extract(filename: string, buffer: Buffer, ext: string): Promise<VisualExtraction> {
-  const client = getAnthropicClient();
-  const base64 = buffer.toString("base64");
-
-  const source =
-    ext === ".pdf"
-      ? ({
-          type: "document" as const,
-          source: { type: "base64" as const, media_type: "application/pdf" as const, data: base64 },
-        })
-      : ({
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: (MEDIA_TYPES[ext] ?? "image/png") as "image/png",
-            data: base64,
-          },
-        });
-
-  const response = await client.messages.create({
-    model: AI_MODEL,
-    max_tokens: 16000,
+  const answer = await ask({
+    maxTokens: 16000,
     system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: [
-          source,
-          {
-            type: "text",
-            text: `Transcribe every role shown in this file ("${filename}") into the JSON array described in your instructions.`,
-          },
-        ],
-      },
-    ],
+    media: {
+      kind: ext === ".pdf" ? "pdf" : "image",
+      mediaType: MEDIA_TYPES[ext] ?? "image/png",
+      base64: buffer.toString("base64"),
+    },
+    prompt: `Transcribe every role shown in this file ("${filename}") into the JSON array described in your instructions.`,
   });
 
-  const text = response.content
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("")
-    .trim();
+  // A chart bigger than one pass can hold comes back cut off mid-array, and
+  // by the time it reaches the parser it is indistinguishable from a model
+  // that simply got it wrong. Said plainly here, because the two call for
+  // completely different things from the person who uploaded it.
+  if (answer.truncated) {
+    throw new UnsupportedFileError(
+      `"${filename}" holds more roles than Atlas can transcribe in one pass, so the reading stopped part-way ` +
+        `and none of it was used rather than the half that arrived. Split it into one image per division and ` +
+        `upload them together.`
+    );
+  }
 
-  return { rows: parseRows(text, filename) };
+  return { rows: parseRows(answer.text, filename) };
 }
 
 function parseRows(raw: string, filename: string): Record<string, string>[] {

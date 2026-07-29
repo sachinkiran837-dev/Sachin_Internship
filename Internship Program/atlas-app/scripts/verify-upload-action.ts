@@ -246,7 +246,7 @@ async function main() {
     if (storedPlan.source !== "unavailable") {
       throw new Error(`without a key, the plan must record why: ${storedPlan.source}`);
     }
-    if (!storedPlan.notes.includes("ANTHROPIC_API_KEY")) {
+    if (!storedPlan.notes.includes("no AI key")) {
       throw new Error(`the stored plan must say why it wasn't applied: ${storedPlan.notes}`);
     }
     console.log(
