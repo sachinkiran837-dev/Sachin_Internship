@@ -4,6 +4,11 @@ import { matchHeader, type FileUse, type IngestPlan, type RowFilter } from "./pl
 import { EMPTY_ANSWERS, mapValue, type IngestAnswers } from "./answers";
 import { note, type IngestNote } from "./notes";
 import { brandNote, detectBrandColumn } from "./detectBrand";
+import {
+  departmentNote,
+  detectDepartmentColumn,
+  noDepartmentNote,
+} from "./detectDepartment";
 import { CANONICAL_FIELDS, type ColumnMapping } from "@/lib/graph/types";
 
 /**
@@ -622,6 +627,33 @@ export function bindFiles(
     if (detected) {
       groupBy = { column: detected.column, label: detected.group.label, topLabel: detected.group.topLabel };
       bindNotes.push(brandNote(detected));
+    }
+  }
+
+  // Which column each file's department came from, said out loud. It is the
+  // one field the whole comparison is cut by, and the client is the only
+  // person who can tell Atlas it picked the wrong column — so the choice, and
+  // the failure to make one, both belong on the register rather than in a
+  // confidence score nobody reads.
+  for (const f of normalised) {
+    if (f.use === "structure") continue;
+    const named = f.columns.find((c) => c.field === "department")?.column ?? null;
+
+    if (!named) {
+      bindNotes.push(noDepartmentNote(f.parsed.headers, f.filename));
+      continue;
+    }
+
+    // Only worth a note where the header did not simply say so. A column
+    // called "Department" needs no explaining. Re-run with the same
+    // exclusions the mapper used, so the note describes the column that was
+    // actually taken rather than a job-title column it was never offered.
+    const taken = new Set(
+      f.columns.filter((c) => c.field && c.field !== "department").map((c) => c.column)
+    );
+    const detected = detectDepartmentColumn(f.parsed.rows, f.parsed.headers, taken);
+    if (detected && detected.column === named && detected.found !== "name") {
+      bindNotes.push(departmentNote(detected));
     }
   }
 

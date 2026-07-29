@@ -1,4 +1,5 @@
 import type { ColumnMapping } from "@/lib/graph/types";
+import { detectDepartmentColumn } from "./detectDepartment";
 
 /**
  * Synonym lists for the columns that show up across the common HR export
@@ -20,8 +21,15 @@ const SYNONYMS = {
     "department",
     "dept",
     "division",
+    "subdivision",
+    "sub department",
     "function",
+    "functional area",
     "business unit",
+    "business area",
+    "org unit",
+    "organisational unit",
+    "organizational unit",
     "unit",
     "cost centre",
     "cost center",
@@ -29,9 +37,11 @@ const SYNONYMS = {
     "directorate",
     "service",
     "service line",
+    "service area",
     "practice",
     "discipline",
     "faculty",
+    "job family",
     "branch",
     "depot",
     "site",
@@ -39,6 +49,13 @@ const SYNONYMS = {
     "region",
     "portfolio",
     "workstream",
+    "work stream",
+    "capability",
+    "chapter",
+    "pillar",
+    "stream",
+    "area",
+    "segment",
     "group",
     "section",
   ],
@@ -130,40 +147,11 @@ function normalize(header: string): string {
 }
 
 /**
- * Whether a column's own values rule it out of being a department.
- *
- * A header is not enough to identify a department column. "RateUnit" contains
- * the word "unit", which is a perfectly good word for the part of an
- * organisation someone belongs to — and on a real client file that put 756
- * people in a department called "Hourly" and 104 in one called "Annually",
- * after which the function comparison was between two payroll arrangements
- * and every screen built on it was answering nothing.
- *
- * The values settle it, and settle it without a taxonomy of department names
- * that could never be complete: no organisation has a department called
- * Hourly, Casual or Full-time. Where every distinct value in a column is one
- * of those, the column states how someone is paid or engaged and the header
- * resembling "unit" is a coincidence. Anything less than unanimous is left
- * alone — a genuine "Casual Pool" department must not be thrown away because
- * one of its values reads like a contract type.
- */
-const PAY_BASIS =
-  /^(hourly|hour|per hour|hr|annual|annually|annum|per annum|p\.? ?a\.?|yearly|year|salaried|salary|weekly|week|fortnightly|fortnight|biweekly|monthly|month|daily|day|sessional|piece rate)$/;
-
-const ENGAGEMENT =
-  /^(full[ -]?time|part[ -]?time|ft|pt|casual|permanent|perm|temporary|temp|contract|contractor|fixed[ -]?term|employee|agency|locum|intern|apprentice|volunteer|active|inactive|terminated|vacant|open|filled)$/;
-
-function statesSomethingElse(values: string[]): boolean {
-  const distinct = [...new Set(values.map((v) => (v ?? "").trim().toLowerCase()).filter(Boolean))];
-  if (distinct.length === 0) return false;
-  return distinct.every((v) => PAY_BASIS.test(v) || ENGAGEMENT.test(v));
-}
-
-/**
- * @param rows Optional. When the rows are to hand, a column whose values
- * disqualify it from a field is passed over so the field can go to the next
- * best column, or to none — which is honest, and which the confirm screen
- * reports, rather than being quietly filled with the wrong column.
+ * @param rows Optional. When the rows are to hand, the department is chosen
+ * on the evidence of the column's contents as well as its header — see
+ * detectDepartment.ts. A column that disqualifies itself is passed over so
+ * the field goes to the next best column, or to none, which is honest and
+ * which the confirm screen reports.
  */
 export function mapColumns(
   headers: string[],
@@ -174,19 +162,6 @@ export function mapColumns(
     ...bestMatch(normalize(sourceColumn)),
   }));
 
-  // Only the department field is checked this way. It is the one field whose
-  // synonyms are ordinary English words ("unit", "group", "team", "section")
-  // that turn up inside the names of columns about something else entirely.
-  const disqualified = new Set<string>();
-  if (rows && rows.length > 0) {
-    for (const c of candidates) {
-      if (c.field !== "department") continue;
-      if (statesSomethingElse(rows.map((r) => r[c.sourceColumn]))) {
-        disqualified.add(c.sourceColumn);
-      }
-    }
-  }
-
   // Each field goes to the column that resembles it most, not to whichever
   // column happened to be listed first. A file with "FirstName", "Surname"
   // and a composed "Employee Name" has three columns wanting the name field;
@@ -194,11 +169,48 @@ export function mapColumns(
   // establishment is called "Melanie".
   const winner = new Map<string, string>();
   for (const c of candidates) {
-    if (c.field === null || disqualified.has(c.sourceColumn)) continue;
+    if (c.field === null) continue;
     const held = candidates.find((o) => o.sourceColumn === winner.get(c.field!));
     // Ties go to the earlier column, so a file with one obvious match per
     // field maps exactly as it always did.
     if (!held || c.score > held.score) winner.set(c.field, c.sourceColumn);
+  }
+
+  // The department is decided by detectDepartment.ts rather than here,
+  // whenever the rows are to hand.
+  //
+  // Every other field can be identified from its header: a column called
+  // "Base Pay" is the pay, and nothing else is. The department cannot. Its
+  // words are ordinary English — unit, group, team, section, area, service —
+  // and they turn up inside the names of columns about something else
+  // ("Rate Unit", "Pay Group", "Team Member Ref"), while the column that
+  // really holds it is as likely to be called "Directorate" or "Grp3". Header
+  // resemblance alone got all three of those wrong on real files.
+  //
+  // So the choice is made on the header *and* the shape of the column *and*
+  // what its values mean, by one function that can see all three. A header
+  // match with no rows behind it still falls through to the synonym winner
+  // below, because a header is better than nothing.
+  if (rows && rows.length > 0) {
+    const taken = new Set(
+      [...winner.entries()].filter(([field]) => field !== "department").map(([, col]) => col)
+    );
+
+    winner.delete("department");
+    const detected = detectDepartmentColumn(rows, headers, taken);
+
+    if (detected) {
+      winner.set("department", detected.column);
+      // A column whose header said nothing has no claim on the field in
+      // `candidates`, so state it directly — and keep the confidence below
+      // the auto-map bar, so the confirm screen shows it as a reading rather
+      // than as something the file said.
+      const candidate = candidates.find((c) => c.sourceColumn === detected.column);
+      if (candidate) {
+        candidate.field = "department";
+        candidate.score = Math.max(candidate.score, 0.5 + detected.placementRate * 0.4);
+      }
+    }
   }
 
   return candidates.map(({ sourceColumn, field, score }) => {
@@ -209,8 +221,7 @@ export function mapColumns(
     // and quietly become everyone's salary — after which the real payroll
     // figures arrive, disagree, and are discarded as conflicts. An unmapped
     // extra column is recoverable; a poisoned cost field is not.
-    const claimed =
-      field !== null && !disqualified.has(sourceColumn) && winner.get(field) === sourceColumn;
+    const claimed = field !== null && winner.get(field) === sourceColumn;
 
     return {
       sourceColumn,
