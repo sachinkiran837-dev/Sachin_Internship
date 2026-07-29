@@ -102,7 +102,12 @@ async function main() {
   console.log(`2. one chunk missing → refused rather than silently truncated`);
 
   // --- 3. the real action ingests from ids alone ------------------------
-  const before = (await listOrgs()).length;
+  // Identified by set difference rather than by position, because listOrgs()
+  // has no ORDER BY and Postgres is free to return rows in any order. Taking
+  // "the last one" passes on an empty database and silently reads somebody
+  // else's establishment on a full one — which reads as catastrophic row loss
+  // in the assertion below rather than as the test picking the wrong org.
+  const beforeIds = new Set((await listOrgs()).map((o) => o.id));
   const form = new FormData();
   form.append("uploadId", uploadId);
   form.set("anonymize", "on");
@@ -110,9 +115,13 @@ async function main() {
   await runAction(form);
 
   const orgs = await listOrgs();
-  assert(orgs.length === before + 1, "the staged upload should have produced one org");
+  const fresh = orgs.filter((o) => !beforeIds.has(o.id));
+  assert(
+    fresh.length === 1,
+    `the staged upload should have produced exactly one org, got ${fresh.length}`
+  );
 
-  const org = orgs[orgs.length - 1];
+  const org = fresh[0];
   const positions = await getBaselinePositions(org.id);
   const rootId = positions.find((p) => p.managerId === null)?.id ?? null;
   const metrics = computeMetrics(positions, rootId);

@@ -79,8 +79,40 @@ export interface FileBinding {
   planReason: string | null;
 }
 
+/**
+ * One reporting line the client's own org chart draws, expressed in the
+ * establishment's own terms.
+ *
+ * Collected at the moment the chart is laid over the position list, because
+ * that is the only point where the chart's internal reference ("reports to
+ * box-3") has been translated into something the rest of Atlas can recognise.
+ * Kept so the *built map* can be checked against the chart afterwards — a
+ * separate question from whether the two files agreed on paper, and the one a
+ * client actually asks: does the picture you drew match the picture I gave you.
+ */
+export interface StructureClaim {
+  filename: string;
+  /** Identifies the subject row: its position ID where there is one, else its name. */
+  subjectKey: string;
+  subjectLabel: string;
+  /**
+   * The same, for the manager the chart puts them under.
+   *
+   * Where the chart's reference could not be translated into an establishment
+   * row — a chief executive who appears in payroll but has no box drawn on the
+   * chart — the raw reference is kept instead. That is exactly what gets
+   * written onto the row, and the graph builder resolves it by ID or by name
+   * like any other, so the check has to be able to follow it the same way.
+   */
+  managerKey: string;
+  /** What the chart called that manager, for the message. */
+  managerLabel: string;
+}
+
 export interface BoundDataset extends ParsedFile {
   bindings: FileBinding[];
+  /** Every reporting line the structure files draw, for the post-build check. */
+  structureClaims: StructureClaim[];
   /** The consolidation column, resolved to the name it carries in `rows`. */
   groupBy: { column: string; label: string; topLabel: string } | null;
   /**
@@ -332,6 +364,7 @@ export function bindFiles(
       headers: [],
       rows: [],
       bindings,
+      structureClaims: [],
       groupBy: null,
       groupValues: [],
       filteredOut: 0,
@@ -542,9 +575,18 @@ export function bindFiles(
 
   // --- lay the structure files over the establishment ---------------------
   const bindNotes: IngestNote[] = [];
+  const structureClaims: StructureClaim[] = [];
   for (const f of structureFiles) {
     bindings.push(
-      overlayStructure(f, coreRows, coreFields, coreExtras, inferredStructure.has(f), bindNotes)
+      overlayStructure(
+        f,
+        coreRows,
+        coreFields,
+        coreExtras,
+        inferredStructure.has(f),
+        bindNotes,
+        structureClaims
+      )
     );
   }
 
@@ -573,6 +615,7 @@ export function bindFiles(
     headers,
     rows,
     bindings,
+    structureClaims,
     groupBy,
     groupValues: groupBy ? countGroupValues(normalised, groupBy.column) : [],
     notes: [...readable.flatMap((f) => f.parsed.notes ?? []), ...bindNotes],
@@ -659,7 +702,8 @@ function overlayStructure(
   coreExtras: string[],
   /** True when Atlas chose this role itself rather than being told to. */
   inferred: boolean,
-  notes: IngestNote[]
+  notes: IngestNote[],
+  claims: StructureClaim[]
 ): FileBinding {
   const establishmentSize = coreRows.length;
   const byId = new Map<string, Record<string, string>>();
@@ -751,6 +795,18 @@ function overlayStructure(
   let agreed = 0;
   const conflicts: { who: string; inList: string; onChart: string }[] = [];
 
+  // How the establishment identifies a row, using the same two keys the graph
+  // builder resolves manager references by. Recorded now because after the
+  // graph is built the rows have been scrubbed and re-indexed, and names may
+  // have been pseudonymised — these keys survive both.
+  const rowKey = (row: Record<string, string>): string =>
+    (row.positionId ?? "").trim() || (row.name ?? "").trim();
+  const rowLabel = (row: Record<string, string>): string =>
+    (row.name ?? "").trim() ||
+    (row.title ?? "").trim() ||
+    (row.positionId ?? "").trim() ||
+    "a role";
+
   f.rows.forEach((row, i) => {
     const target = match.get(i);
     if (!target) return;
@@ -767,12 +823,22 @@ function overlayStructure(
     const ref = key(reference);
     const managerIndex = chartById.get(ref) ?? chartByName.get(ref) ?? chartByTitle.get(ref);
     const managerRow = managerIndex === undefined ? undefined : match.get(managerIndex);
+    const subjectKey = rowKey(target);
 
     if (!managerRow) {
       // Untranslatable, but the graph builder resolves manager references by
       // name as well as by ID, so the raw value still has a chance.
       target.managerName = reference;
       unresolved++;
+      if (subjectKey) {
+        claims.push({
+          filename: f.filename,
+          subjectKey,
+          subjectLabel: rowLabel(target),
+          managerKey: reference,
+          managerLabel: reference,
+        });
+      }
       return;
     }
 
@@ -794,6 +860,16 @@ function overlayStructure(
 
     target.managerName = value || reference;
     applied++;
+
+    if (subjectKey) {
+      claims.push({
+        filename: f.filename,
+        subjectKey,
+        subjectLabel: rowLabel(target),
+        managerKey: rowKey(managerRow) || reference,
+        managerLabel: rowLabel(managerRow),
+      });
+    }
   });
 
   // The reporting line has to be in the combined header list or it is dropped

@@ -394,6 +394,12 @@ export async function buildOrgGraph(
     while (cursor?.managerId) {
       if (visited.has(cursor.id)) {
         r.managerId = topNodeId !== null ? headingFor(r) : (rootEntry?.id ?? null);
+        // The reference resolved perfectly well — it just pointed into a loop,
+        // so the line had to be discarded to produce a tree at all. That is
+        // not a confident reporting line, and anything checking the map
+        // against the client's own chart has to be able to tell this apart
+        // from a manager that simply could not be found.
+        r.managerConfidence = 0.2;
         issues.push({
           id: randomUUID(),
           orgId: options.orgId,

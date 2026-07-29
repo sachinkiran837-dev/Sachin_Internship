@@ -10,6 +10,7 @@ import type { IngestAnswers } from "./answers";
 import type { Position } from "@/lib/graph/types";
 import { unitNames } from "@/lib/analysis/functions";
 import { cleanRows, cleaningNote } from "@/lib/canonical/clean";
+import { verifyStructureAgainstMap, verificationNote } from "./verifyStructure";
 import { readBusinessContext } from "@/lib/hypothesis/read";
 import { EMPTY_BUSINESS } from "@/lib/hypothesis/context";
 import {
@@ -24,6 +25,7 @@ import {
   savePositions,
   saveSourceBlobs,
   saveSourceFiles,
+  saveStructureVerification,
 } from "@/db/repo";
 import { SUPPORTED_FORMATS } from "./formats";
 
@@ -203,6 +205,18 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   });
   await savePositions(positions);
 
+  // The map, checked back against the chart the client uploaded — after it was
+  // built, not while it was being assembled. The cross-check during binding
+  // compares what two documents claim; this compares what the finished
+  // structure actually does, which is the only version of the question a
+  // client can look at the screen and confirm for themselves.
+  const verification = verifyStructureAgainstMap(
+    bound.structureClaims,
+    bound.rows,
+    positions
+  );
+  await saveStructureVerification(orgId, verification);
+
   // The hypothesis layer, read against the establishment that now exists.
   // Nothing in it touches the map or the positions — it decides what the
   // findings can say, which is why it is read here and applied later.
@@ -224,6 +238,8 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   const notes: IngestNote[] = [...(bound.notes ?? []), ...graphNotes];
   const scrubbed = cleaningNote(ledger);
   if (scrubbed) notes.push(scrubbed);
+  const qc = verificationNote(verification);
+  if (qc) notes.push(qc);
   const merged = appliedMapping(bound, answers, revised !== null);
   if (merged) notes.push(merged);
   const vocabulary = await reconcileGroups(bound, answers);

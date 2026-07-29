@@ -35,6 +35,16 @@ export const orgs = pgTable("orgs", {
    * so the record of it outlives the run that made it.
    */
   cleaningJson: text("cleaning_json"),
+  /**
+   * JSON StructureVerification — the finished map checked back against the org
+   * chart the client uploaded, line by line.
+   *
+   * Stored rather than recomputed because the chart's reporting lines only
+   * exist in translated form during binding: once the graph is built there is
+   * one line per position and nothing left to compare it against. Reproducing
+   * this from the saved establishment would mean re-running the whole ingest.
+   */
+  structureQcJson: text("structure_qc_json"),
   /** How many times this establishment has been re-read with new answers. */
   revision: integer("revision").notNull().default(0),
 });

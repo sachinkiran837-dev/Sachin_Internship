@@ -1,0 +1,1 @@
+ALTER TABLE "orgs" ADD COLUMN "structure_qc_json" text;

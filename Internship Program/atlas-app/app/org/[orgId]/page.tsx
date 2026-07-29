@@ -9,9 +9,11 @@ import {
   getNotes,
   getOrg,
   getSourceFiles,
+  getStructureVerification,
   hasSourceBlobs,
 } from "@/db/repo";
 import { OrgNav } from "@/components/OrgNav";
+import { StructureCheck } from "@/components/ingest/StructureCheck";
 import { SourceDataReport } from "@/components/ingest/SourceDataReport";
 import { PlanReport } from "@/components/ingest/PlanReport";
 import { IngestNotes } from "@/components/ingest/IngestNotes";
@@ -49,6 +51,7 @@ export default async function OrgConfirmPage({
   const plan = await getIngestPlan(orgId);
   const notes = await getNotes(orgId);
   const canReread = await hasSourceBlobs(orgId);
+  const structureCheck = await getStructureVerification(orgId);
 
   // How complete the establishment actually is, field by field. The headline
   // count says how many rows arrived; this says how much of each row is
@@ -156,6 +159,12 @@ export default async function OrgConfirmPage({
         <PlanReport context={org.ingestContext ?? ""} plan={plan} />
 
         {sourceFiles.length > 0 && <SourceDataReport files={sourceFiles} />}
+
+        {/* After the per-file report, because it only means anything once the
+            reader knows which file was used as the chart — and before the
+            completeness bars, because a structure that doesn't match the
+            client's own chart makes every figure below it beside the point. */}
+        <StructureCheck verification={structureCheck} />
 
         <Card>
           <CardHeader>

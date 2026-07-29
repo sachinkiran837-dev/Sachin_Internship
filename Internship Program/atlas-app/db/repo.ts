@@ -19,6 +19,10 @@ import type { IngestNote } from "@/lib/ingest/notes";
 import { parseAnswers, type IngestAnswers } from "@/lib/ingest/answers";
 import { parseBusinessContext, type BusinessContext } from "@/lib/hypothesis/context";
 import { EMPTY_LEDGER, type CleaningLedger } from "@/lib/canonical/clean";
+import {
+  EMPTY_VERIFICATION,
+  type StructureVerification,
+} from "@/lib/ingest/verifyStructure";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -266,6 +270,28 @@ export async function getCleaningLedger(orgId: string): Promise<CleaningLedger> 
 
 export async function saveCleaningLedger(orgId: string, ledger: CleaningLedger): Promise<void> {
   await db.update(orgs).set({ cleaningJson: JSON.stringify(ledger) }).where(eq(orgs.id, orgId));
+}
+
+/** The finished map, checked line by line against the chart the client uploaded. */
+export async function getStructureVerification(orgId: string): Promise<StructureVerification> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  const raw = rows[0]?.structureQcJson;
+  if (!raw) return EMPTY_VERIFICATION;
+  try {
+    return JSON.parse(raw) as StructureVerification;
+  } catch {
+    return EMPTY_VERIFICATION;
+  }
+}
+
+export async function saveStructureVerification(
+  orgId: string,
+  verification: StructureVerification
+): Promise<void> {
+  await db
+    .update(orgs)
+    .set({ structureQcJson: JSON.stringify(verification) })
+    .where(eq(orgs.id, orgId));
 }
 
 /** The hypothesis layer: what the client said about the business itself. */
