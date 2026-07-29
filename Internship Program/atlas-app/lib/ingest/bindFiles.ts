@@ -1,13 +1,20 @@
 import { mapColumns } from "./columnMapper";
 import type { ConversionReport, ParsedFile } from "./parseFile";
 import { matchHeader, type FileUse, type IngestPlan, type RowFilter } from "./plan";
-import { EMPTY_ANSWERS, mapValue, type IngestAnswers } from "./answers";
+import {
+  departmentColumnFor,
+  EMPTY_ANSWERS,
+  mapValue,
+  NO_DEPARTMENT,
+  type IngestAnswers,
+} from "./answers";
 import { note, type IngestNote } from "./notes";
 import { brandNote, detectBrandColumn } from "./detectBrand";
 import {
+  departmentAnsweredNote,
   departmentNote,
+  departmentQuestion,
   detectDepartmentColumn,
-  noDepartmentNote,
 } from "./detectDepartment";
 import { CANONICAL_FIELDS, type ColumnMapping } from "@/lib/graph/types";
 
@@ -191,24 +198,54 @@ function normalise(
   answers: IngestAnswers
 ): NormalisedFile {
   const filePlan = plan?.files.find((f) => f.filename === file.filename) ?? null;
-  const mapping = applyOverrides(
-    mapColumns(file.parsed.headers, file.parsed.rows),
-    filePlan?.columns ?? {}
+
+  // What the client said beats what the planner read out of the instructions,
+  // which beats what the matcher worked out from the data. They answered a
+  // question about this specific file after seeing what Atlas made of it.
+  const answered = departmentColumnFor(answers, file.filename);
+  const chosen =
+    answered && answered !== NO_DEPARTMENT && file.parsed.headers.includes(answered)
+      ? answered
+      : null;
+
+  const natural = mapColumns(file.parsed.headers, file.parsed.rows);
+
+  // A column can be the job title and the department at once. Plenty of
+  // exports carry the department nowhere but inside the title — "HCP Team
+  // Lead", "Finance Officer" — and a client who says so must not lose their
+  // job titles for it. So a column already carrying another field has its
+  // values *copied* into the department, and a column carrying nothing is
+  // claimed outright.
+  const alreadyUsed = natural.find(
+    (m) => m.sourceColumn === chosen && m.targetField && m.targetField !== "department"
   );
+  const departmentFromShared = alreadyUsed ? chosen : null;
+
+  const overrides = { ...(filePlan?.columns ?? {}) };
+  if (chosen && !alreadyUsed) overrides[chosen] = "department";
+
+  const mapping = applyOverrides(natural, overrides);
+
+  // A file the client has said carries no department must stop offering one,
+  // however convincing a column looks on the next read.
+  const suppressDepartment = answered === NO_DEPARTMENT;
 
   const fields = new Set<CanonicalField>();
   const extras: string[] = [];
 
   const rename = new Map<string, string>();
   for (const m of mapping) {
-    if (m.targetField) {
-      fields.add(m.targetField as CanonicalField);
-      rename.set(m.sourceColumn, m.targetField);
+    const field = m.targetField === "department" && suppressDepartment ? null : m.targetField;
+    if (field) {
+      fields.add(field as CanonicalField);
+      rename.set(m.sourceColumn, field);
     } else {
       extras.push(m.sourceColumn);
       rename.set(m.sourceColumn, m.sourceColumn);
     }
   }
+
+  if (departmentFromShared) fields.add("department" as CanonicalField);
 
   // Scope is applied against the original column, before renaming, because
   // that is the name the user and the planner both saw.
@@ -229,6 +266,7 @@ function normalise(
     for (const [col, value] of Object.entries(row)) {
       out[rename.get(col) ?? col] = value;
     }
+    if (departmentFromShared) out.department = (row[departmentFromShared] ?? "").trim();
     if (groupColumn && groupLabel) {
       // Vocabularies the client has already reconciled are applied here, at
       // the one place the raw value is still in hand.
@@ -637,24 +675,57 @@ export function bindFiles(
   // confidence score nobody reads.
   for (const f of normalised) {
     if (f.use === "structure") continue;
-    const named = f.columns.find((c) => c.field === "department")?.column ?? null;
 
-    if (!named) {
-      bindNotes.push(noDepartmentNote(f.parsed.headers, f.filename));
+    const answered = departmentColumnFor(answers, f.filename);
+    if (answered) {
+      const values = [
+        ...new Set(f.parsed.rows.map((r) => (r[answered] ?? "").trim()).filter(Boolean)),
+      ];
+      bindNotes.push(departmentAnsweredNote(f.filename, answered, values));
       continue;
     }
 
-    // Only worth a note where the header did not simply say so. A column
-    // called "Department" needs no explaining. Re-run with the same
-    // exclusions the mapper used, so the note describes the column that was
-    // actually taken rather than a job-title column it was never offered.
+    const named = f.columns.find((c) => c.field === "department")?.column ?? null;
+    const ask = (why: "none" | "guessed" | "contradicted") =>
+      bindNotes.push(
+        departmentQuestion(f.parsed.rows, f.parsed.headers, f.filename, { found: named, why })
+      );
+
+    if (!named) {
+      ask("none");
+      continue;
+    }
+
+    // Re-run with the same exclusions the mapper used, so this describes the
+    // column that was actually taken rather than a job-title column it was
+    // never offered.
     const taken = new Set(
       f.columns.filter((c) => c.field && c.field !== "department").map((c) => c.column)
     );
     const detected = detectDepartmentColumn(f.parsed.rows, f.parsed.headers, taken);
-    if (detected && detected.column === named && detected.found !== "name") {
-      bindNotes.push(departmentNote(detected));
+    if (!detected || detected.column !== named) continue;
+
+    // A column carried entirely by its contents is a reading, not a fact.
+    if (detected.found === "contents") {
+      ask("guessed");
+      continue;
     }
+
+    // And a well-named column can still be the wrong one. Where the job
+    // titles in the file read as functions far better than the department
+    // column does, the column is naming places or service lines — which is
+    // worth recording and is not what a comparison can be cut by. Atlas
+    // cannot tell which the client wants, so it asks.
+    const titleColumn = f.columns.find((c) => c.field === "title")?.column ?? null;
+    if (!titleColumn) continue;
+
+    const titles = detectDepartmentColumn(f.parsed.rows, [titleColumn]);
+    if (titles && titles.placementRate > detected.placementRate + 0.3) {
+      ask("contradicted");
+      continue;
+    }
+
+    if (detected.found === "both") bindNotes.push(departmentNote(detected));
   }
 
   return {

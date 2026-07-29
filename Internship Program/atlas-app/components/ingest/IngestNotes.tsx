@@ -179,6 +179,50 @@ function NoteBody({ note, tone }: { note: IngestNote; tone: "question" | "assump
 
       {note.answerKind === "hours" && <HoursAnswer />}
       {note.answerKind === "mapping" && <MappingAnswer note={note} />}
+      {note.answerKind === "column" && <ColumnAnswer note={note} />}
+    </div>
+  );
+}
+
+/**
+ * Pick which column holds a field, from that file's own columns.
+ *
+ * Shown with a sample of what is in each one, because the column *names* are
+ * exactly what Atlas already failed to decide on — a list of them again is no
+ * help. What settles it is the client's own data: "Grp3 — Finance,
+ * Operations, People" answers the question on sight, and "RateUnit — Hourly,
+ * Annually" shows why it was passed over.
+ *
+ * Any column can be chosen, including the job title. Plenty of exports carry
+ * the department nowhere else.
+ */
+function ColumnAnswer({ note }: { note: IngestNote }) {
+  if (note.options.length === 0) return null;
+
+  const filename = note.options[0].seenIn;
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <Label htmlFor={`department-column:${filename}`} className="text-xs">
+        The column holding the department in {filename}
+      </Label>
+      <select
+        id={`department-column:${filename}`}
+        name={`department-column:${filename}`}
+        defaultValue=""
+        className="h-9 w-full max-w-2xl rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <option value="">Leave this open for now</option>
+        {note.options.map((option) => (
+          <option key={option.from} value={option.from}>
+            {option.from} — {option.to}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-muted-foreground">
+        Pick the job title column if that is where your departments live — Atlas will read each
+        person&rsquo;s function out of it. Everything is read again from your original files.
+      </p>
     </div>
   );
 }

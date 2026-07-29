@@ -26,13 +26,37 @@ export interface IngestAnswers {
    * group rather than two.
    */
   valueMap: Record<string, Record<string, string>>;
+  /**
+   * Filename → the column in it that holds the department, said by the client
+   * rather than worked out.
+   *
+   * Kept per file because an upload is rarely one system: a payroll extract
+   * calling it "Division" and a staff list carrying it inside "Job Title" are
+   * two different answers to the same question, and one global setting would
+   * force the client to pick which of their files to get right.
+   *
+   * The value {@link NO_DEPARTMENT} means "there isn't one" — which is an
+   * answer, and a different thing from not having been asked.
+   */
+  departmentColumn: Record<string, string>;
   /** Added to the upload instructions on the next run. */
   extraContext: string;
 }
 
+/**
+ * What the client picks to say a file carries no department at all.
+ *
+ * Needed because "" already means unanswered, and the difference matters: an
+ * unanswered file is asked about again on every re-read, while a file the
+ * client has told Atlas has no department should stop asking and get on with
+ * reading the function off the job titles.
+ */
+export const NO_DEPARTMENT = "(no department in this file)";
+
 export const EMPTY_ANSWERS: IngestAnswers = {
   hoursPerWeek: null,
   valueMap: {},
+  departmentColumn: {},
   extraContext: "",
 };
 
@@ -40,7 +64,26 @@ export function hasAnswers(answers: IngestAnswers): boolean {
   return (
     answers.hoursPerWeek !== null ||
     Object.keys(answers.valueMap).length > 0 ||
+    Object.keys(answers.departmentColumn).length > 0 ||
     answers.extraContext.trim().length > 0
+  );
+}
+
+/**
+ * The column the client named for a file, if any.
+ *
+ * Matched loosely on the filename, because a file re-uploaded from a
+ * different folder or with a copy suffix is still the same file to the person
+ * who answered the question.
+ */
+export function departmentColumnFor(
+  answers: IngestAnswers,
+  filename: string
+): string | null {
+  const direct = answers.departmentColumn[filename];
+  if (direct) return direct;
+  return (
+    Object.entries(answers.departmentColumn).find(([f]) => fold(f) === fold(filename))?.[1] ?? null
   );
 }
 
@@ -72,9 +115,20 @@ export function parseAnswers(json: string | null): IngestAnswers {
       }
     }
 
+    const departmentColumn: Record<string, string> = {};
+    if (record.departmentColumn && typeof record.departmentColumn === "object") {
+      for (const [file, column] of Object.entries(
+        record.departmentColumn as Record<string, unknown>
+      )) {
+        const value = String(column ?? "").trim();
+        if (value) departmentColumn[file] = value;
+      }
+    }
+
     return {
       hoursPerWeek: Number.isFinite(hours) && hours > 0 ? hours : null,
       valueMap,
+      departmentColumn,
       extraContext: String(record.extraContext ?? "").trim(),
     };
   } catch {
@@ -109,6 +163,19 @@ export function mergeAnswers(existing: IngestAnswers, formData: FormData): Inges
       continue;
     }
     merged.valueMap[column] = { ...(merged.valueMap[column] ?? {}), [from]: to };
+  }
+
+  // Department columns arrive as department-column:<filename> = <column>.
+  for (const [field, value] of formData.entries()) {
+    if (!field.startsWith("department-column:")) continue;
+    const filename = field.slice("department-column:".length);
+    const column = String(value).trim();
+    if (!filename) continue;
+
+    // An empty selection is the client leaving the question open rather than
+    // answering it — they have to pick NO_DEPARTMENT to close it that way.
+    if (!column) delete merged.departmentColumn[filename];
+    else merged.departmentColumn[filename] = column;
   }
 
   merged.extraContext = String(formData.get("extraContext") ?? "").trim();

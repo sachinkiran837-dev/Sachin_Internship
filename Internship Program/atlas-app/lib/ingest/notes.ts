@@ -27,6 +27,12 @@ export type AnswerKind =
   | "hours"
   /** A value-by-value reconciliation of two vocabularies. */
   | "mapping"
+  /**
+   * A choice of which column in a file holds a field. Drawn as a list of that
+   * file's columns with a sample of what each one contains, because the
+   * column names alone are what Atlas already failed to decide on.
+   */
+  | "column"
   /** Nothing to fill in — the note is there to be read. */
   | "none";
 

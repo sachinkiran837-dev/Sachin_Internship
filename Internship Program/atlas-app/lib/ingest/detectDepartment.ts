@@ -1,5 +1,6 @@
+import { NO_DEPARTMENT } from "./answers";
 import { groupByRule } from "./functionGroups";
-import { note, type IngestNote } from "./notes";
+import { note, type IngestNote, type NoteOption } from "./notes";
 
 /**
  * Finding which part of the organisation each person works in, whatever the
@@ -354,25 +355,118 @@ export function departmentNote(detection: DepartmentDetection): IngestNote {
 }
 
 /**
- * Says plainly that nothing was found, listing what was looked at.
+ * The columns of a file, each with a sample of what is in it, offered as the
+ * answer to "which one is the department".
  *
- * A blank department column is the single most consequential gap a file can
- * have — it is what the whole comparison is cut by — and a client who sent
- * what they thought was a complete extract needs to see which of their
- * columns Atlas considered before they will believe it.
+ * The sample is the point. Atlas has already failed to decide this from the
+ * column names, so a list of the same names is no help — what the client
+ * recognises is their own data: seeing "Finance, Operations, People" next to
+ * a column called "Grp3" answers the question instantly, and seeing "Hourly,
+ * Annually" next to "RateUnit" shows why it was not taken.
  */
-export function noDepartmentNote(headers: string[], filename: string): IngestNote {
-  return note(`no-department:${filename}`, "question", {
-    topic: `No department column in ${filename}`,
-    statement:
-      `Atlas found nothing in "${filename}" saying which part of the organisation each person works in.`,
-    evidence:
-      `All ${headers.length} columns were checked by name and by contents: ` +
-      `${headers.slice(0, 12).join(", ")}${headers.length > 12 ? ", …" : ""}. ` +
-      `None is named as a department, and none holds values that read as department names.`,
+function columnChoices(
+  rows: Record<string, string>[],
+  headers: string[],
+  filename: string
+): NoteOption[] {
+  const choices: NoteOption[] = [];
+
+  for (const column of headers) {
+    if (column === SHEET_COLUMN) continue;
+    const seen: string[] = [];
+    for (const row of rows) {
+      const value = (row[column] ?? "").trim();
+      if (value && !seen.includes(value)) seen.push(value);
+      if (seen.length === 4) break;
+    }
+    if (seen.length === 0) continue;
+    choices.push({
+      from: column,
+      to: seen.join(", ").slice(0, 70),
+      seenIn: filename,
+    });
+  }
+
+  // Always last, and always present: a file that genuinely carries no
+  // department needs an answer that says so, or the question is asked again
+  // on every re-read for the rest of the establishment's life.
+  choices.push({
+    from: NO_DEPARTMENT,
+    to: "read each person's function from their job title instead",
+    seenIn: filename,
+  });
+
+  return choices;
+}
+
+/**
+ * Asks which column holds the department, when Atlas could not settle it.
+ *
+ * This is the single most consequential gap a file can have — it is what the
+ * whole comparison is cut by — so it is asked rather than guessed at, and the
+ * question shows the client their own columns and values rather than
+ * explaining what a department is.
+ *
+ * Real files put it in places no rule reaches: inside "Job Title" as
+ * "HCP Team Lead" or "Finance", in a column named after a system rather than
+ * a concept, or nowhere at all. Any column can be chosen, including the job
+ * title — the client knows their export and Atlas does not.
+ */
+export function departmentQuestion(
+  rows: Record<string, string>[],
+  headers: string[],
+  filename: string,
+  reason: { found: string | null; why: "none" | "guessed" | "contradicted" }
+): IngestNote {
+  const statement =
+    reason.why === "none"
+      ? `Atlas found nothing in "${filename}" saying which part of the organisation each person works in.`
+      : reason.why === "guessed"
+        ? `Nothing in "${filename}" is named as a department, so Atlas took "${reason.found}" on the strength of what is in it.`
+        : `Atlas took "${reason.found}" as the department in "${filename}", but the job titles inside it mostly belong to other functions.`;
+
+  const evidence =
+    reason.why === "none"
+      ? `All ${headers.length} columns were checked by name and by contents. None is named as a ` +
+        `department, and none holds values that read as department names.`
+      : reason.why === "guessed"
+        ? `Its values look like department names, but its column name says nothing — so this is a ` +
+          `reading rather than something your file states.`
+        : `A column naming places or service lines rather than functions is a real thing to record, ` +
+          `and it is not what a function comparison can be built on.`;
+
+  return note(`department-column:${filename}`, "question", {
+    topic: `Which column is the department in ${filename}?`,
+    statement,
+    evidence,
     effect:
-      `Function is read from each person's job title instead, which says what they do rather than ` +
-      `where they sit. Add a department column, or name the one that carries it in the instructions ` +
-      `box, and it will be used ahead of the titles.`,
+      `Every function comparison on the findings screen is cut by this. Until it is settled, each ` +
+      `person's function is read from their job title, which says what they do rather than where ` +
+      `they sit. Pick the column below — it can be the job title column, if that is where your ` +
+      `departments live.`,
+    answerKind: "column",
+    options: columnChoices(rows, headers, filename),
+  });
+}
+
+/** Confirms the client's own answer back to them, so it can be changed. */
+export function departmentAnsweredNote(
+  filename: string,
+  column: string,
+  values: string[]
+): IngestNote {
+  const blank = column === NO_DEPARTMENT;
+
+  return note(`department-column:${filename}`, "assumption", {
+    topic: `Department column in ${filename}`,
+    statement: blank
+      ? `You told Atlas "${filename}" carries no department, so each person's function is read from their job title.`
+      : `You told Atlas the department in "${filename}" is the "${column}" column, and it is used ahead of anything Atlas would have picked.`,
+    evidence: blank
+      ? `No column in the file is read as a department.`
+      : `${values.length} distinct value${values.length === 1 ? "" : "s"}: ` +
+        `${values.slice(0, 8).join(", ")}${values.length > 8 ? ", …" : ""}.`,
+    effect: `Change it below and the files are read again.`,
+    answeredWith: blank ? "no department" : column,
   });
 }
