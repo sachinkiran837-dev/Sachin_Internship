@@ -1,4 +1,4 @@
-import type { Position } from "@/lib/graph/types";
+import { UNCLASSIFIED, type Position } from "@/lib/graph/types";
 
 /**
  * The one clean table every raw file eventually becomes.
@@ -154,7 +154,7 @@ export function buildCanonicalTable(
     if (!p.rawName && p.displayName === p.title) {
       flags.push("No name in any file — identified by job title");
     }
-    if (p.department === "Unclassified") {
+    if (p.department === UNCLASSIFIED) {
       flags.push(
         supplied.department
           ? "No department recorded against this row"
@@ -186,7 +186,7 @@ export function buildCanonicalTable(
 
     return {
       employee: p.displayName,
-      department: p.department === "Unclassified" ? "" : p.department,
+      department: p.department === UNCLASSIFIED ? "" : p.department,
       brand: brandOf(p, byId),
       // A heading is not a person, so reporting into one is reported as
       // reporting to nobody rather than to a box.

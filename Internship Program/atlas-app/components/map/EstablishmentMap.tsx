@@ -18,7 +18,7 @@ import { tagNodes } from "@/lib/graph/tagging";
 import { computeVisibleLayout } from "@/lib/graph/layout";
 import { getAncestorIds, getDescendantIds } from "@/lib/graph/descendants";
 import { nearestCandidate } from "@/lib/graph/hitTest";
-import type { Position } from "@/lib/graph/types";
+import { UNCLASSIFIED, type Position } from "@/lib/graph/types";
 import { reassignPosition } from "@/lib/scenario/mutate";
 import { OrgNodeCard, type OrgNodeData } from "./OrgNodeCard";
 import { DetailPanel } from "./DetailPanel";
@@ -77,10 +77,37 @@ function EstablishmentMapInner({
 }) {
   const layoutNodes = useMemo(() => tagNodes(positions, rootId), [positions, rootId]);
   const byId = useMemo(() => new Map(layoutNodes.map((n) => [n.id, n] as const)), [layoutNodes]);
-  const departments = useMemo(
-    () => Array.from(new Set(positions.map((p) => p.department))).sort(),
-    [positions]
-  );
+  /**
+   * The departments in the canonical table, and nothing else.
+   *
+   * Read the same way that table reads them, so the two screens never disagree
+   * about what departments this organisation has. Brand headings are excluded
+   * because they are scaffolding rather than jobs and carry the brand name in
+   * the department field, which put trading names in a department list. Rows
+   * with no department are collected under one option instead of appearing as
+   * the internal "Unclassified" sentinel — finding them on the map is exactly
+   * how someone chases down a gap, so the option stays, spelled the way the
+   * canonical table spells it.
+   */
+  const departments = useMemo(() => {
+    const counts = new Map<string, number>();
+    let unstated = 0;
+
+    for (const p of positions) {
+      if (p.synthetic) continue;
+      const name = p.department.trim();
+      if (name === "" || name === UNCLASSIFIED) {
+        unstated++;
+        continue;
+      }
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+
+    return {
+      named: [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+      unstated,
+    };
+  }, [positions]);
 
   // User-driven expand/collapse toggles only. Filter/search-driven visibility
   // is layered on top as a derived value (effectiveExpandedIds) rather than
@@ -332,12 +359,17 @@ function EstablishmentMapInner({
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
           >
-            <option value="all">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            <option value="all">All departments ({departments.named.length})</option>
+            {departments.named.map(([name, count]) => (
+              <option key={name} value={name}>
+                {name} ({count.toLocaleString()})
               </option>
             ))}
+            {departments.unstated > 0 && (
+              <option value={UNCLASSIFIED}>
+                Not stated ({departments.unstated.toLocaleString()})
+              </option>
+            )}
           </select>
         </div>
         <div className="flex flex-col gap-1">

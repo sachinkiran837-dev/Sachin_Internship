@@ -50,6 +50,16 @@ export interface ColumnMapping {
   autoMapped: boolean;
 }
 
+/**
+ * What a position's department reads as when no department column reached it.
+ *
+ * A sentinel rather than an empty string, because the map, the comparison
+ * engine and the canonical table all have to agree on what "no department"
+ * looks like — and three screens each testing for their own version of empty
+ * is how one of them starts showing a department called "".
+ */
+export const UNCLASSIFIED = "Unclassified";
+
 export const CANONICAL_FIELDS = {
   name: "Employee name",
   title: "Position title",

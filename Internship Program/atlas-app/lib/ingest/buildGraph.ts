@@ -4,12 +4,13 @@ import { mapColumns } from "./columnMapper";
 import { pseudonymize } from "./anonymize";
 import { classifyRoles, roleKey, type RoleClassification } from "./classify";
 import { note, type IngestNote } from "./notes";
-import type {
-  ColumnMapping,
-  FieldConfidence,
-  IngestIssue,
-  Position,
-  PositionStatus,
+import {
+  UNCLASSIFIED,
+  type ColumnMapping,
+  type FieldConfidence,
+  type IngestIssue,
+  type Position,
+  type PositionStatus,
 } from "@/lib/graph/types";
 
 export interface BuildGraphOptions {
@@ -203,7 +204,7 @@ export async function buildOrgGraph(
       positionIdRaw,
       rawName: (nameCol ? row[nameCol] : "").trim() || `Unnamed row ${index + 2}`,
       title: (titleCol ? row[titleCol] : "").trim() || "Unspecified title",
-      department: (deptCol ? row[deptCol] : "").trim() || "Unclassified",
+      department: (deptCol ? row[deptCol] : "").trim() || UNCLASSIFIED,
       managerNameRaw: (managerCol ? row[managerCol] : "").trim(),
       cost: costCol ? parseCost(row[costCol]) : 0,
       fte,
@@ -502,7 +503,7 @@ function agencyNote(positions: Position[], hadFteColumn: boolean): IngestNote[] 
 
   const employed = positions.filter((p) => !p.synthetic).length - agency.length;
   const departments = [...new Set(agency.map((p) => p.department))].filter(
-    (d) => d !== "Unclassified"
+    (d) => d !== UNCLASSIFIED
   );
 
   return [

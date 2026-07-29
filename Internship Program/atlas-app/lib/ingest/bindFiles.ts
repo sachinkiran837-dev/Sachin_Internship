@@ -3,6 +3,7 @@ import type { ConversionReport, ParsedFile } from "./parseFile";
 import { matchHeader, type FileUse, type IngestPlan, type RowFilter } from "./plan";
 import { EMPTY_ANSWERS, mapValue, type IngestAnswers } from "./answers";
 import { note, type IngestNote } from "./notes";
+import { brandNote, detectBrandColumn } from "./detectBrand";
 import { CANONICAL_FIELDS, type ColumnMapping } from "@/lib/graph/types";
 
 /**
@@ -609,7 +610,17 @@ export function bindFiles(
     (a, b) => (uploadOrder.get(a.filename) ?? 0) - (uploadOrder.get(b.filename) ?? 0)
   );
 
-  const groupBy = resolveGroupBy(plan, headers);
+  // The instructions win outright. Only when nobody said which column holds
+  // the trading name does Atlas go looking for it — and it says so when it
+  // does, because consolidating reshapes the whole map.
+  let groupBy = resolveGroupBy(plan, headers);
+  if (!groupBy) {
+    const detected = detectBrandColumn(rows, headers);
+    if (detected) {
+      groupBy = { column: detected.column, label: detected.group.label, topLabel: detected.group.topLabel };
+      bindNotes.push(brandNote(detected));
+    }
+  }
 
   return {
     headers,
