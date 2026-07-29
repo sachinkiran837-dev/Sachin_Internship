@@ -1,0 +1,1 @@
+ALTER TABLE "positions" ADD COLUMN "function_group" text;

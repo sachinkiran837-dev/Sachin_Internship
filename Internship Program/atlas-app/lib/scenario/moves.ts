@@ -149,6 +149,12 @@ export function add(
     displayName: "Vacant — new position",
     title: input.title,
     department: input.department,
+    // A role added inside a scenario is grouped the way the department it is
+    // being added to already groups, so a new post never lands in a function
+    // of its own and skews the comparison it was created to relieve.
+    functionGroup:
+      positions.find((p) => p.department === input.department && !p.synthetic)?.functionGroup ??
+      input.department,
     managerId: input.managerId,
     cost: input.cost,
     fte: 1,

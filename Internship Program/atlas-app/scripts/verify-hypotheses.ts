@@ -42,6 +42,7 @@ function pos(over: Partial<Position> & { title: string; department: string }): P
     orgId: ORG,
     rawName: null,
     displayName: over.title,
+    functionGroup: over.department,
     managerId: null,
     cost: 90_000,
     fte: 1,

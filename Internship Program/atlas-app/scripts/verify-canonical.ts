@@ -42,6 +42,7 @@ function pos(over: Partial<Position> & { title: string }): Position {
     rawName: over.title,
     displayName: over.title,
     department: "Unclassified",
+    functionGroup: over.department ?? "Unclassified",
     managerId: null,
     cost: 0,
     fte: 1,
@@ -238,8 +239,17 @@ function main() {
   const lines = csv.split("\n");
   assert(lines.length === 6, `header plus 5 rows: got ${lines.length}`);
   assert(
-    lines[0].startsWith("Employee,Job title,Department,Brand,Manager,Employment type,FTE,Salary"),
-    `the six columns must come first, in order: ${lines[0]}`
+    lines[0].startsWith(
+      "Employee,Job title,Function,Department (as stated),Brand,Manager,Employment type,FTE,Salary"
+    ),
+    `the columns must come first, in order: ${lines[0]}`
+  );
+  // The rolled-up function is what everything compares across, and the
+  // department as the file stated it sits beside it. Dropping the second would
+  // leave a client unable to check where their own team went.
+  assert(
+    lines[0].includes("Department (as stated)"),
+    "the department as stated must survive into the file people open"
   );
 
   // Excel treats a cell opening with = + - or @ as a formula, and client data

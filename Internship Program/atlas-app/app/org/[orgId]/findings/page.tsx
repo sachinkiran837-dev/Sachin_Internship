@@ -91,11 +91,11 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
               Atlas is working from your files alone. Tell it what the business earns, what
               you&rsquo;re trying to reach and what you already suspect, and it will rank functions
               on revenue per head, measure every play against your target, and test each suspicion
-              against the establishment.{" "}
-              <Link href={`/org/${orgId}/context`} className="font-medium underline underline-offset-4">
-                Add the business context
+              against the establishment. It is asked for on the{" "}
+              <Link href="/" className="font-medium underline underline-offset-4">
+                upload screen
               </Link>
-              .
+              , above the file picker.
             </p>
           </div>
         )}
@@ -156,12 +156,10 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
                   </li>
                 ))}
               </ul>
-              <Link
-                href={`/org/${orgId}/context`}
-                className="mt-1 inline-flex w-fit items-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                Edit the business context
-              </Link>
+              <p className="mt-1 text-xs text-muted-foreground">
+                All of this is asked for on the upload screen. Supplying it means re-reading the
+                files with it in hand.
+              </p>
             </CardContent>
           </Card>
         )}

@@ -91,6 +91,7 @@ export default async function CanonicalDataPage({
               <TableRow>
                 <TableHead>Employee</TableHead>
                 <TableHead>Job title</TableHead>
+                <TableHead>Function</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>{table.brandLabel}</TableHead>
                 <TableHead>Manager</TableHead>
@@ -106,6 +107,9 @@ export default async function CanonicalDataPage({
                   <TableCell className="font-medium">{r.employee}</TableCell>
                   <TableCell className="text-muted-foreground">{r.title}</TableCell>
                   <TableCell>{r.department || <Missing />}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {r.departmentAsStated || <Missing />}
+                  </TableCell>
                   <TableCell>{r.brand || <Missing />}</TableCell>
                   <TableCell>{r.manager || <Missing />}</TableCell>
                   <TableCell>

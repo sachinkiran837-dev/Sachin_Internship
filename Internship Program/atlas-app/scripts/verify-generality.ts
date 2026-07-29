@@ -82,6 +82,11 @@ const RECOGNISERS = [
   "lib/ingest/classify.ts",
   "lib/ingest/parsePdfChart.ts",
   "config/protected-roles.json",
+  // Rolling "Ward 4B" up to Operations is the same kind of job as knowing a
+  // nurse is clinical: the file has to know sector vocabulary to recognise it.
+  // Stripping the terms out would make Atlas worse at hospitals and no better
+  // at anything else.
+  "config/function-groups.json",
 ];
 
 /**
@@ -215,6 +220,7 @@ function runOrg(label: string, buffer: Buffer) {
     displayName: r.name || r.title,
     title: r.title,
     department: r.department || "Unclassified",
+    functionGroup: r.department || "Unclassified",
     managerId: r.managerName || null,
     cost: Number(r.cost) || 0,
     fte: Number(r.fte) || 1,
@@ -300,6 +306,9 @@ function main() {
     })),
   ].map((n) => ({
     ...n,
+    // Fixtures group as they are stated, so this still tests the engine and
+    // not the rollup — the rollup has its own suite.
+    functionGroup: n.department,
     orgId: "sw",
     rawName: n.title,
     displayName: n.title,

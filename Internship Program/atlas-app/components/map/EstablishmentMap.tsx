@@ -78,13 +78,13 @@ function EstablishmentMapInner({
   const layoutNodes = useMemo(() => tagNodes(positions, rootId), [positions, rootId]);
   const byId = useMemo(() => new Map(layoutNodes.map((n) => [n.id, n] as const)), [layoutNodes]);
   /**
-   * The departments in the canonical table, and nothing else.
+   * The functions in the canonical table, and nothing else.
    *
-   * Read the same way that table reads them, so the two screens never disagree
-   * about what departments this organisation has. Brand headings are excluded
-   * because they are scaffolding rather than jobs and carry the brand name in
-   * the department field, which put trading names in a department list. Rows
-   * with no department are collected under one option instead of appearing as
+   * Read from the same field that table reads, so the two screens never
+   * disagree about what functions this organisation has. Brand headings are
+   * excluded because they are scaffolding rather than jobs and carry the brand
+   * name in the department field, which put trading names in the list. Rows
+   * with no function are gathered under one option rather than appearing as
    * the internal "Unclassified" sentinel — finding them on the map is exactly
    * how someone chases down a gap, so the option stays, spelled the way the
    * canonical table spells it.
@@ -95,7 +95,7 @@ function EstablishmentMapInner({
 
     for (const p of positions) {
       if (p.synthetic) continue;
-      const name = p.department.trim();
+      const name = p.functionGroup.trim();
       if (name === "" || name === UNCLASSIFIED) {
         unstated++;
         continue;
@@ -132,7 +132,7 @@ function EstablishmentMapInner({
     return new Set(
       layoutNodes
         .filter((n) => {
-          if (filterDept !== "all" && n.department !== filterDept) return false;
+          if (filterDept !== "all" && n.functionGroup !== filterDept) return false;
           if (filterFlag !== "all") {
             const flagMatch =
               (filterFlag === "protected" && n.flags.protected) ||
@@ -351,7 +351,7 @@ function EstablishmentMapInner({
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="map-dept" className="text-xs text-muted-foreground">
-            Department
+            Function
           </Label>
           <select
             id="map-dept"
@@ -359,7 +359,7 @@ function EstablishmentMapInner({
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
           >
-            <option value="all">All departments ({departments.named.length})</option>
+            <option value="all">All functions ({departments.named.length})</option>
             {departments.named.map(([name, count]) => (
               <option key={name} value={name}>
                 {name} ({count.toLocaleString()})

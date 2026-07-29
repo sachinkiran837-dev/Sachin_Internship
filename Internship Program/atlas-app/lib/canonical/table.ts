@@ -30,8 +30,13 @@ export type EmploymentType = "Full-time" | "Part-time" | "Agency" | "Vacant" | "
 export interface CanonicalRow {
   /** 1. The person. Falls back to the position title where the file named nobody. */
   employee: string;
-  /** 2. Function or department. */
+  /**
+   * 2. The function this person's department rolls up into — Finance,
+   * Operations, People. What every comparison is made across.
+   */
   department: string;
+  /** The department exactly as the source file stated it. Never overwritten. */
+  departmentAsStated: string;
   /** 3. The company or brand employing them. */
   brand: string;
   /** 4. Who they report to, by name. */
@@ -186,7 +191,8 @@ export function buildCanonicalTable(
 
     return {
       employee: p.displayName,
-      department: p.department === UNCLASSIFIED ? "" : p.department,
+      department: p.functionGroup === UNCLASSIFIED ? "" : p.functionGroup,
+      departmentAsStated: p.department === UNCLASSIFIED ? "" : p.department,
       brand: brandOf(p, byId),
       // A heading is not a person, so reporting into one is reported as
       // reporting to nobody rather than to a box.
@@ -213,7 +219,7 @@ export function buildCanonicalTable(
         note: "Rows named by job title alone carry no person from any file.",
       },
       {
-        column: "Department",
+        column: "Function",
         filled: filled((r) => r.department !== ""),
         total: rows.length,
         note: "Without it, functions cannot be compared against each other.",
@@ -249,7 +255,8 @@ export function buildCanonicalTable(
 const CSV_COLUMNS = [
   "Employee",
   "Job title",
-  "Department",
+  "Function",
+  "Department (as stated)",
   "Brand",
   "Manager",
   "Employment type",
@@ -280,6 +287,7 @@ export function toCsv(table: CanonicalTable): string {
       cell(r.employee),
       cell(r.title),
       cell(r.department),
+      cell(r.departmentAsStated),
       cell(r.brand),
       cell(r.manager),
       cell(r.employmentType),

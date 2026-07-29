@@ -9,6 +9,11 @@ export interface Position {
   displayName: string;
   title: string;
   department: string;
+  /**
+   * The function this department rolls up into. Falls back to the department
+   * itself where nothing would place it, so this is always safe to group by.
+   */
+  functionGroup: string;
   managerId: string | null;
   cost: number;
   fte: number;

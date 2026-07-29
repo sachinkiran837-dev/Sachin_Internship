@@ -377,7 +377,12 @@ export function analyseFunctions(
 
   const divisions = divisionOf(tagged, rootId);
 
-  const byFunction = buildFor("function", "Function", nodes, (n) => n.department, business);
+  // Cut on the rolled-up function, not the raw department. Sixty departments
+  // produce sixty units of which fifty are below the size where a ratio means
+  // anything, so the comparison would quietly describe whichever teams were
+  // large. The rollup is registered on the confirm screen, and the raw
+  // department is still on every position for the plays to work on.
+  const byFunction = buildFor("function", "Function", nodes, (n) => n.functionGroup, business);
   const byDivision = buildFor(
     "division",
     "Division",

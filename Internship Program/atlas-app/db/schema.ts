@@ -100,6 +100,17 @@ export const positions = pgTable("positions", {
   displayName: text("display_name").notNull(),
   title: text("title").notNull(),
   department: text("department").notNull(),
+  /**
+   * The bucket this department rolls up into — Finance, Operations, People.
+   * Derived at ingest and stored rather than recomputed, because placing the
+   * names a keyword cannot claim costs a model call, and a comparison whose
+   * groups shifted between two page loads would be indefensible.
+   *
+   * `department` above is never overwritten. Every scenario play works on
+   * that, not on this: merging a payroll team into treasury because both are
+   * "Finance" is not a consolidation anyone asked for.
+   */
+  functionGroup: text("function_group"),
   managerId: text("manager_id"),
   cost: real("cost").notNull(),
   fte: real("fte").notNull().default(1),

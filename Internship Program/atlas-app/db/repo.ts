@@ -51,6 +51,11 @@ function toPosition(row: typeof positions.$inferSelect): Position {
     displayName: row.displayName,
     title: row.title,
     department: row.department,
+    // Establishments ingested before the rollup existed carry no group. The
+    // department is the honest fallback: it is what every comparison used
+    // before, so an old map keeps working rather than grouping everyone under
+    // an empty string.
+    functionGroup: row.functionGroup ?? row.department,
     managerId: row.managerId,
     cost: row.cost,
     fte: row.fte,
@@ -105,6 +110,7 @@ export async function savePositions(rows: Position[]): Promise<void> {
     displayName: p.displayName,
     title: p.title,
     department: p.department,
+    functionGroup: p.functionGroup,
     managerId: p.managerId,
     cost: p.cost,
     fte: p.fte,
