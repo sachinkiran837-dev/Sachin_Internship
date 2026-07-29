@@ -188,7 +188,9 @@ Two refusals do the real work here:
 
 ### What the files can never say
 
-Revenue is the one input that decides whether a function is *expensive* or simply *carrying the business*, and it exists in nobody's payroll export. Neither does what leadership is trying to reach, nor what they already suspect. So the upload screen has a **second context box** — deliberately not the same question as the first. That one is about reading (which file is the structure, what a column means); this one is about meaning.
+Revenue is the one input that decides whether a function is *expensive* or simply *carrying the business*, and it exists in nobody's payroll export. Neither does what leadership is trying to reach, nor what they already suspect. So the upload screen asks for it **before the files**, as step 1 — deliberately not the same question as the file-context box further down. That one is about reading (which file is the structure, what a column means); this one is about meaning.
+
+The order is the argument. Handed a spreadsheet first, a person describes their spreadsheet — which columns are which, which rows to drop — and never reaches what the business is for, because by then the task in front of them looks like a data problem. Asked before any of that, they describe the organisation.
 
 `lib/hypothesis/read.ts` turns that prose into facts, with the model doing the only job it is trusted with anywhere in Atlas: reading. It never calculates, and **every unit name it returns is checked back against the establishment's real units** — revenue named against a part of the business that doesn't exist is reported as unmatched, never snapped onto whichever unit looks closest. Each figure keeps the client's own sentence attached, and the Business context tab shows the two side by side, because that figure is about to be divided by a headcount and put in front of a board.
 

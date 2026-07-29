@@ -26,7 +26,8 @@ export default async function Home() {
         <CardHeader>
           <CardTitle>Start a new establishment</CardTitle>
           <CardDescription>
-            Every upload becomes its own org with a confirmed baseline graph.
+            Say what the business is doing first, then hand over the files. Every upload becomes its
+            own org with a confirmed baseline graph.
           </CardDescription>
         </CardHeader>
         <CardContent>
