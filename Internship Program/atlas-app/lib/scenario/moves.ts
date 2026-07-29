@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import { randomUUID } from "node:crypto";
 import type { Position } from "@/lib/graph/types";
 import { checkCycle, checkProtected, checkRoot, checkSynthetic } from "./guardrails";
@@ -221,13 +222,7 @@ export function rebase(
   };
 }
 
-function money(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+const money = currency;
 
 /** Merge a function into a shared service: graft one department's subtree root under another's. */
 export function merge(positions: Position[], rootId: string | null, fromNeedle: string, intoNeedle: string): MoveOutcome {

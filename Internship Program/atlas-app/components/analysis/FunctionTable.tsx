@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import { COMPARISON_OUTLIER_MULTIPLE, type UnitComparison } from "@/lib/analysis/functions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,15 +22,6 @@ import {
  * The median row is the benchmark itself, made visible. It is the only
  * benchmark Atlas uses.
  */
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-    notation: n >= 1_000_000 ? "compact" : "standard",
-  }).format(n);
-}
 
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 

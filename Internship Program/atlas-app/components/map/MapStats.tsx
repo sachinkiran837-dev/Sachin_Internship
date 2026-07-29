@@ -1,13 +1,5 @@
+import { currency } from "@/lib/format/currency";
 import type { DiagnosticMetrics } from "@/lib/graph/types";
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-    notation: "compact",
-  }).format(n);
-}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (

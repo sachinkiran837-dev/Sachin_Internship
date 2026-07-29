@@ -9,13 +9,13 @@ import type { Position } from "@/lib/graph/types";
  * they disagree.
  *
  * A single export is self-consistent by construction. Several are not: two
- * systems in the same company will call one brand "365 Care" and "365C", and
+ * systems in the same company will call one brand "Northbrook Care" and "NBC", and
  * an org map that consolidates on that column ends up drawing two brands
  * where there is one. Nothing in the data says they are the same — only the
  * client knows that — so Atlas will not merge them on a resemblance.
  *
  * What it does instead is notice, propose, and ask. The proposal is drafted
- * by the model, which is the right tool for "does "365C" mean "365 Care"?"
+ * by the model, which is the right tool for "does "NBC" mean "Northbrook Care"?"
  * and the wrong tool for anything downstream of it: the pairing it returns
  * is shown to the client as an editable suggestion and applied only once
  * they have confirmed it. Until then the groups stay as the files wrote them.
@@ -194,7 +194,7 @@ function mostSimilar(value: string, candidates: string[]): string | null {
 /**
  * The pairings that were actually applied, stated back.
  *
- * Merging "365C" into "365 Care" removes a group from the map and moves
+ * Merging "NBC" into "Northbrook Care" removes a group from the map and moves
  * everyone in it. Whether the client typed the pairing into a box or wrote it
  * in a sentence, the result is the same and has to be as visible as the
  * question it replaced — otherwise answering a question makes it vanish, and

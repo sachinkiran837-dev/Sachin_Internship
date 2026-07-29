@@ -52,7 +52,7 @@ export function HypothesisForm({
           name="hypothesis"
           rows={8}
           defaultValue={business.raw}
-          placeholder="e.g. Home care across six brands. AgeUp did about $40m last year, Homewell $26m, SAI around $12m. We need $3m out of the cost base by FY27 and we can't touch frontline care. We think head office has grown faster than the business, and that Platform is over-managed for what it delivers."
+          placeholder="e.g. Field services across four trading names. Northbrook did about 40m last year, Calder 26m, Weir around 12m. We need 3m out of the cost base by FY27 and we can't touch frontline delivery. We think head office has grown faster than the business, and that Operations is over-managed for what it delivers."
           className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
       </div>

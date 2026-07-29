@@ -1,5 +1,6 @@
 "use client";
 
+import { currency } from "@/lib/format/currency";
 import { useActionState, useState } from "react";
 import { ChevronDown, ShieldCheck, TrendingDown } from "lucide-react";
 import { layerPlayAction, runPlayAction, type RunPlayState } from "@/app/actions/scenario";
@@ -8,14 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const initialState: RunPlayState = { error: null };
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 /**
  * How the money should be read. A rebase and an avoided hire are not the

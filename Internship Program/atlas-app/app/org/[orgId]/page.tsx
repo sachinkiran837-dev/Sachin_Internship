@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Check } from "lucide-react";
@@ -252,11 +253,7 @@ export default async function OrgConfirmPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {new Intl.NumberFormat("en-AU", {
-                        style: "currency",
-                        currency: "AUD",
-                        maximumFractionDigits: 0,
-                      }).format(p.cost)}
+                      {currency(p.cost)}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -162,8 +162,8 @@ function hasValue(v: string): boolean {
  * walked up to the node just below the top.
  *
  * On a consolidated establishment that branch is the brand heading Atlas
- * added, which is exactly the cut a group client wants — AgeUp against
- * Homewell. On a single-entity chart it is the executive's directorate, which
+ * added, which is exactly the cut a group client wants — one trading name against
+ * another. On a single-entity chart it is the executive's directorate, which
  * is the same question asked one level down.
  */
 function divisionOf(nodes: LayoutNode[], rootId: string | null): Map<string, string> {
@@ -408,8 +408,8 @@ export function analyseFunctions(
  * Every name a client could reasonably use for a part of this organisation,
  * across both cuts.
  *
- * Handed to the hypothesis-layer reader so that "AgeUp did about forty
- * million" can be attached to the AgeUp that actually exists, and "Retail did
+ * Handed to the hypothesis-layer reader so that "Northbrook did about forty
+ * million" can be attached to the Northbrook that actually exists, and "Retail did
  * forty million" — where there is no Retail — is reported back as unmatched
  * instead of being snapped onto whichever unit looks closest.
  */

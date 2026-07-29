@@ -1,5 +1,6 @@
 "use client";
 
+import { currency } from "@/lib/format/currency";
 import {
   Sheet,
   SheetContent,
@@ -9,10 +10,6 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import type { LayoutNode } from "@/lib/graph/types";
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
-}
 
 export function DetailPanel({
   node,

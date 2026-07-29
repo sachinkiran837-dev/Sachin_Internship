@@ -13,7 +13,7 @@ import {
  * into facts Atlas can compute against.
  *
  * The model is doing the only job it is ever trusted with here — reading. It
- * takes "AgeUp did about forty million last year and we think ops is carrying
+ * takes "Northbrook did about forty million last year and we think ops is carrying
  * too many team leaders" and returns a revenue line and a belief. It does not
  * decide whether the belief is true, does not divide revenue by headcount, and
  * does not get to name a unit that isn't in the establishment: every unit it

@@ -101,7 +101,8 @@ export function IngestNotes({
             </Label>
             <p className="text-xs text-muted-foreground">
               Describe it however you like — which file is really the structure, what a column
-              actually means, that AUH is AgeUp, that a full-time week here is 38 hours, which rows
+              actually means, that one file&rsquo;s brand codes are another file&rsquo;s full names, that a
+              full-time week here is 38 hours, which rows
               aren&rsquo;t in scope. Atlas re-reads your files against this together with everything
               on this screen: the role it gave each file, every column it recognised, and each
               question above. Whatever it changes is shown back here, and anything it can&rsquo;t
@@ -111,7 +112,7 @@ export function IngestNotes({
               id="extraContext"
               name="extraContext"
               rows={3}
-              placeholder="e.g. The payroll listing is FY27 but the chart is a year old — trust the payroll. AUH is AgeUp. Contractors in the Type column should count as contingent."
+              placeholder="e.g. The payroll listing is FY27 but the chart is a year old — trust the payroll. NB in the entity column means Northbrook. Contractors in the Type column should count as contingent."
               className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>

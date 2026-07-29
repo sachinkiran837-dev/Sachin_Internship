@@ -31,7 +31,7 @@ export function ScenarioMoveForm({ orgId, scenarioId }: { orgId: string; scenari
       <div className="flex gap-2">
         <Input
           name="move"
-          placeholder='e.g. "flatten Clinical Operations to 4 layers"'
+          placeholder='e.g. "flatten Field Operations to 4 layers"'
           className="flex-1"
         />
         <Button type="submit" disabled={isPending}>

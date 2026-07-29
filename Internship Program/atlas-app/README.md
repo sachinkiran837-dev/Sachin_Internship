@@ -169,6 +169,27 @@ Each of these creates real establishments in the real database, so the home page
 
 `verify-plays.ts` is the one that keeps the numbers honest: for every play it replays the play's own operations against the diagnostic engine and fails if the claimed saving doesn't equal the sum of the roles it named, if the modelled cost didn't actually move, or if the predicted headcount delta doesn't match what happened.
 
+## Any organisation, not this one
+
+Atlas is built to ingest whatever an organisation has and make recommendations from it. The datasets it has been developed against are training material, not a specification, and `scripts/verify-generality.ts` exists to keep it that way — because the failure mode here is slow and nobody notices it happening. A tool gets built against one client's files; their brand names end up in a placeholder because they were the handy example; their sector's vocabulary ends up in the copy because that was the language in the room. Nothing breaks. The next client is told their agency premium is about nurses and their wide-span play protects ward cover, and the tool reads as somebody else's, because it is.
+
+Two rules, both enforced by that script on every run:
+
+- **No client identifier appears anywhere in shipped code** — copy, prompts or comments. No exemptions. It is their data, in our product.
+- **Nothing in the engine assumes a sector, a country, a currency or a schema.** Sector words are banned from copy but permitted in the files whose job is to *recognise* domain vocabulary — the keyword classifier, the chart-title matcher, the protected-role rules. There is a difference between a tool that only works for hospitals and a tool that can read one; stripping health terms out of a recogniser would make Atlas worse at hospitals and no better at anything else.
+
+The script also runs three unrelated organisations — a hospital, a logistics operator and a software company — through one code path with no per-sector configuration. They share no column name (`Position ID` / `Emp No` / `id`, `Directorate` / `Depot` / `team`, `Annual Salary` / `Base Pay` / `salary`) and all three must reach the same canonical shape, and the software company must be told which of its functions is over-managed without a word of clinical vocabulary anywhere in it.
+
+Writing that check found three real defects: `Depot`, `Emp No` and `Base Pay` were all unrecognised, so a logistics export would have lost its organisational unit, its IDs and **every salary** while still producing a confident-looking establishment. The synonym lists are now much wider. `rate` is deliberately still *not* a cost synonym — a rate column is as often hourly as annual, and mapping it straight to cost prices a care worker's year at $36; `composeColumns.ts` reads the basis first and refuses when it can't prove one.
+
+No list of synonyms will ever be complete. A column nobody anticipated is what the upload context box is for, and an unmapped column is always reported rather than silently dropped.
+
+### What is genuinely a deployment setting
+
+- **Currency.** An establishment file never says what currency it is in — a column of `62000` is 62,000 of something. So it is set once (`NEXT_PUBLIC_ATLAS_CURRENCY`, `NEXT_PUBLIC_ATLAS_LOCALE`, defaulting to AUD) and never inferred. Guessing from a locale or a sector would put a symbol in front of every figure on every screen on the strength of a hint, and the only thing worse than an unlabelled number in a board pack is a confidently mislabelled one. `lib/format/currency.ts` is the single formatter; there used to be fourteen copies.
+- **`config/protected-roles.json`** is Australian and health-weighted (Corporations Act s188, WHS duty holders, clinical governance). It is a config file for exactly that reason — a UK manufacturer swaps it for their own statutory roles without touching code.
+- **`config/span-thresholds.json`** and **`config/comparison-rules.json`** hold every threshold, so "healthy span" is a number a client can argue with rather than an assumption buried in a function.
+
 ## The canonical table
 
 Every file eventually becomes one table, and the engine reasons about nothing else. One row per person, and the six things a redesign turns on:

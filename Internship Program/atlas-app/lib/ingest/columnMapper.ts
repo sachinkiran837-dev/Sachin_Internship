@@ -7,21 +7,47 @@ import type { ColumnMapping } from "@/lib/graph/types";
  * unmapped column rather than silently dropped.
  */
 const SYNONYMS = {
-  name: ["name", "employee name", "full name", "worker", "employee", "person", "incumbent"],
+  name: ["name", "employee name", "full name", "worker", "employee", "person", "incumbent", "staff name", "employee full name"],
   title: ["title", "position title", "job title", "role", "position", "job", "designation"],
+  // Every word an organisation might use for "the part of us this person
+  // belongs to". Deliberately wide, because the alternative is a logistics
+  // company whose "Depot" column is dropped as unrecognised and a comparison
+  // screen that can't compare anything. No list will ever be complete — a
+  // column nobody here anticipated is what the upload context box is for,
+  // and an unmapped column is reported rather than silently discarded — but
+  // the common cases should not need a hint.
   department: [
     "department",
+    "dept",
     "division",
     "function",
     "business unit",
+    "unit",
     "cost centre",
     "cost center",
     "team",
     "directorate",
     "service",
+    "service line",
+    "practice",
+    "discipline",
+    "faculty",
+    "branch",
+    "depot",
+    "site",
+    "location",
+    "region",
+    "portfolio",
+    "workstream",
+    "group",
+    "section",
   ],
   managerName: [
     "manager",
+    "manager full name",
+    "reporting line",
+    "reports to name",
+    "direct manager",
     "manager name",
     "reports to",
     "supervisor",
@@ -32,18 +58,56 @@ const SYNONYMS = {
     "reports to id",
     "supervisor id",
   ],
-  positionId: ["position id", "id", "employee id", "position number", "role id", "staff id"],
+  positionId: [
+    "position id",
+    "id",
+    "employee id",
+    "employee number",
+    "employee no",
+    "emp id",
+    "emp no",
+    "staff number",
+    "payroll id",
+    "payroll number",
+    "position number",
+    "role id",
+    "staff id",
+    "person id",
+    "worker id",
+  ],
+  // What an organisation calls what it pays someone. A payroll export that
+  // says "Base Pay" and loses it is worse than one that never had the column:
+  // the establishment looks complete and every saving on it is understated
+  // by the whole population it couldn't price.
   cost: [
     "cost",
     "salary",
+    "base salary",
+    "base pay",
+    "basic pay",
+    "annual salary",
+    "gross salary",
+    "gross pay",
+    "pay",
+    "wage",
+    "wages",
     "fully loaded cost",
     "annual cost",
+    "total cost",
+    "employment cost",
     "compensation",
+    "total compensation",
+    "ctc",
     "flc",
     "remuneration",
     "package",
+    // Deliberately NOT "rate". A rate column is as often hourly as annual,
+    // and reading an hourly rate as a salary prices a care worker's year at
+    // $36. composeColumns.ts reads the basis first and composes an annual
+    // cost only when it can prove one; mapping "rate" straight to cost here
+    // would beat that and quietly reintroduce the bug it exists to prevent.
   ],
-  fte: ["fte", "full time equivalent"],
+  fte: ["fte", "full time equivalent", "contracted fte", "fte value", "contracted hours"],
   status: ["status", "position status", "employment status", "employment type"],
 } satisfies Record<string, string[]>;
 

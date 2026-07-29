@@ -609,7 +609,7 @@ function resolveGroupBy(
 /**
  * Every value of the consolidation column and the files it appeared in.
  * Counted per file rather than off the bound rows, because the whole point is
- * to notice that one file says "365 Care" and another says "365C" — which is
+ * to notice that one file says "Northbrook Care" and another says "NBC" — which is
  * invisible once the rows are in one pile.
  */
 function countGroupValues(

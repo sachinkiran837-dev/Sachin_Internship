@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import assumptions from "@/config/scenario-assumptions.json";
 import spanConfig from "@/config/span-thresholds.json";
 import { tagNodes } from "@/lib/graph/tagging";
@@ -131,7 +132,7 @@ function protectedSkipNote(skipped: LayoutNode[], mode: TouchMode = "structural"
   if (skipped.length === 0) return null;
   const distinct = [...new Set(skipped.map((n) => n.title))];
   const names = distinct.slice(0, 3);
-  const label = mode === "commercial" ? "protected role" : "protected or clinical role";
+  const label = mode === "commercial" ? "protected role" : "protected or safety-critical role";
   return `Left ${skipped.length} ${label}${skipped.length === 1 ? "" : "s"} in place (${names.join(", ")}${
     distinct.length > names.length ? ", …" : ""
   }) — these are blocked when a change is applied, not merely hidden from this list.`;
@@ -234,7 +235,7 @@ const agencyPremium: ScenarioPlay = {
   name: "Convert agency premium to permanent",
   question: "What is the org paying purely for the flexibility of agency labour?",
   thesis:
-    "The saving from an agency nurse is not their salary — the shift still has to be covered. It is only the premium over what the same role costs permanently. Counting the whole role is the most common way redesign business cases overstate themselves.",
+    "The saving from an agency worker is not their salary — the work still has to be covered. It is only the premium over what the same role costs permanently. Counting the whole role is the most common way redesign business cases overstate themselves.",
   lens: "Workforce mix",
   action:
     "Get the agency rate and the permanent equivalent for these roles side by side, then convert the ones where the work is genuinely permanent. Do the rate comparison first: converting surge cover to permanent is a cost increase wearing a saving's clothes.",
@@ -654,13 +655,13 @@ const wideSpanRedistribution: ScenarioPlay = {
       headcountDelta: 0,
       summary: `${candidates.length} overloaded manager${candidates.length === 1 ? "" : "s"} can be brought back inside a healthy span using existing capacity.`,
       method:
-        `This is cost avoidance, not cost-out — nobody leaves and headcount is unchanged. Each relieved manager represents one team-lead hire that no longer needs to happen, priced at this org's own median manager cost (${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(replacementCost)}) rather than an assumed market rate.`,
+        `This is cost avoidance, not cost-out — nobody leaves and headcount is unchanged. Each relieved manager represents one team-lead hire that no longer needs to happen, priced at this org's own median manager cost (${currency(replacementCost)}) rather than an assumed market rate.`,
       // Naming every clinical report it declined to move would list most of
       // the ward; the useful fact is that reporting lines for clinical staff
       // were left alone at all.
       guardrailNote:
         skipped.length > 0
-          ? `Only non-clinical reports were redistributed — ${skipped.length} clinical or protected reporting line${skipped.length === 1 ? " was" : "s were"} left untouched, so ward cover is unchanged.`
+          ? `Only non-safety-critical reports were redistributed — ${skipped.length} safety-critical or protected reporting line${skipped.length === 1 ? " was" : "s were"} left untouched, so frontline cover is unchanged.`
           : null,
     };
   },
@@ -675,7 +676,7 @@ const vacancyRationalisation: ScenarioPlay = {
   name: "Close vacancies the org is running without",
   question: "Which budgeted roles has the org already proved it can operate without?",
   thesis:
-    "A long-held vacancy is budget the org isn't using. The discipline is knowing which ones you can't close: a vacant clinical or safety role is a staffing breach waiting to happen, not a saving.",
+    "A long-held vacancy is budget the org isn't using. The discipline is knowing which ones you can't close: a vacant safety-critical role is a staffing breach waiting to happen, not a saving.",
   lens: "Portfolio",
   action:
     "For each vacancy, ask who is covering the work now. Where the team has absorbed it and service has held, close the line and release the budget. Where nobody is covering it, closing the post makes a live service gap permanent.",
@@ -696,8 +697,8 @@ const vacancyRationalisation: ScenarioPlay = {
     if (closeable.length === 0) {
       return empty(
         this.id,
-        `${vacant.length} vacancy${vacant.length === 1 ? "" : "s"} found, but none can be closed — each is protected, clinical, or still carrying a team.`,
-        "Excluded protected, clinical and team-carrying vacancies."
+        `${vacant.length} vacancy${vacant.length === 1 ? "" : "s"} found, but none can be closed — each is protected, safety-critical, or still carrying a team.`,
+        "Excluded protected, safety-critical and team-carrying vacancies."
       );
     }
 
@@ -717,14 +718,14 @@ const vacancyRationalisation: ScenarioPlay = {
         positionId: n.id,
         title: n.title,
         department: n.department,
-        rationale: `Vacant, non-clinical, and carries no direct reports.`,
+        rationale: `Vacant, not safety-critical, and carries no direct reports.`,
         saving: annualCost(n) * rate,
       })),
       operations: closeable.map((n) => ({ kind: "remove" as const, positionId: n.id })),
       projectedSaving: total,
       savingNature: "cost-out",
       headcountDelta: -closeable.length,
-      summary: `${closeable.length} vacancy${closeable.length === 1 ? "" : "s"} can be closed without touching a clinical or safety role.`,
+      summary: `${closeable.length} vacancy${closeable.length === 1 ? "" : "s"} can be closed without touching a safety-critical role.`,
       method:
         `Saving is the budgeted cost of each closed vacancy at a stated realisation rate of ${(rate * 100).toFixed(0)}% — lower that assumption if these vacancies are partly covered by overtime that would continue.`,
       guardrailNote: notes.filter(Boolean).join(" ") || null,
@@ -918,7 +919,7 @@ const managerRatio: ScenarioPlay = {
     if (ranked.length === 0) {
       return empty(
         this.id,
-        `${surplus} surplus management role${surplus === 1 ? "" : "s"} implied, but every candidate is protected or clinical.`,
+        `${surplus} surplus management role${surplus === 1 ? "" : "s"} implied, but every candidate is protected or safety-critical.`,
         "All thin-span managers are guarded roles."
       );
     }
@@ -1032,7 +1033,7 @@ const contractorInsourcing: ScenarioPlay = {
     if (candidates.length === 0) {
       return empty(
         this.id,
-        "Outsourced clusters found, but every role in them is protected or clinical.",
+        "Outsourced clusters found, but every role in them is protected or safety-critical.",
         "All candidates were guarded roles."
       );
     }

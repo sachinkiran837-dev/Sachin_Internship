@@ -1,12 +1,9 @@
+import { currency } from "@/lib/format/currency";
 import { randomUUID } from "node:crypto";
 import type { DiagnosticMetrics, Finding, FindingsResult } from "@/lib/graph/types";
 import { ask, hasAI } from "@/lib/ai/client";
 
 const MAX_FINDINGS = 5;
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
-}
 
 /**
  * Ranks the already-computed metrics into a capped, evidence-cited findings

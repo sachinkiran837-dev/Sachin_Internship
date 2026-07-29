@@ -22,7 +22,7 @@ export interface IngestAnswers {
   hoursPerWeek: number | null;
   /**
    * Column label → original value → the value it should be read as. This is
-   * how two files that call the same brand "365 Care" and "365C" become one
+   * how two files that call the same brand "Northbrook Care" and "NBC" become one
    * group rather than two.
    */
   valueMap: Record<string, Record<string, string>>;

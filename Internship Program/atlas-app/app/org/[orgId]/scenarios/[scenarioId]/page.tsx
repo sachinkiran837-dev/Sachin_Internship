@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import { notFound } from "next/navigation";
 import {
   getBaselinePositions,
@@ -16,10 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
-}
 
 export default async function ScenarioDetailPage({
   params,

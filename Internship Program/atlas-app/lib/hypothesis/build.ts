@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import {
   COMPARISON_METHOD,
   COMPARISON_OUTLIER_MULTIPLE,
@@ -105,13 +106,6 @@ export interface HypothesisResult {
   wouldUnlock: string[];
   method: string;
 }
-
-const currency = (n: number) =>
-  new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
 
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 
@@ -356,8 +350,9 @@ function productivity(comparison: UnitComparison, business: BusinessContext): Hy
           },
         ],
         action:
-          `Add revenue by ${noun} in the business context — one line each is enough ("AgeUp did about ` +
-          `40m last year"). Atlas will rank every ${noun} by revenue per head and per FTE, show labour ` +
+          `Add revenue by ${noun} in the business context — one line each is enough ("${
+            comparison.comparableUnits[0]?.key ?? "that unit"
+          } did about 40m last year"). Atlas will rank every ${noun} by revenue per head and per FTE, show labour ` +
           `as a share of revenue, and size what the lagging ${noun}s would be worth at the group's own median.`,
         playId: null,
         playName: null,

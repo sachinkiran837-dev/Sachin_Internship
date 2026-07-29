@@ -77,7 +77,7 @@ export interface RowFilter {
  * how many hours a full-time week is, which of their brand codes means which
  * brand. Normally these are collected as structured answers on the confirm
  * screen. The planner can also read them out of a sentence — "a full-time
- * week here is 38 hours and AUH is AgeUp" — which is the point of letting
+ * week here is 38 hours and NB is Northbrook" — which is the point of letting
  * someone describe a correction in their own words rather than hunting for
  * the right box.
  *
@@ -178,7 +178,7 @@ Rules, in order of importance:
 3. A chart or a diagram is "structure" whenever there is also a fuller staff list to lay it over. It is "positions" only when it is the only thing describing who exists.
 4. Set "groupBy" only when the instruction asks for consolidation by some dimension AND a column carrying that dimension actually exists. List the exact column from EVERY file that carries it — two systems rarely name it the same way, and a file whose column you leave out will not be grouped at all. Do not list a column that merely correlates with the dimension.
 5. Set "rowFilter" only when the instruction restricts which rows are in scope. Leave "include" or "exclude" empty when unused.
-6. "answers" carries facts about the organisation that no file states. Set "hoursPerWeek" only when the person says how many hours a full-time week is — it turns hourly rates into annual costs, so a wrong number misprices everyone paid by the hour. Set "valueMap" only when they say that two values naming the same thing should be read as one ("AUH is AgeUp"); both sides must be values that actually appear in the files. Leave either null or empty otherwise. Never infer them from the data.
+6. "answers" carries facts about the organisation that no file states. Set "hoursPerWeek" only when the person says how many hours a full-time week is — it turns hourly rates into annual costs, so a wrong number misprices everyone paid by the hour. Set "valueMap" only when they say that two values naming the same thing should be read as one ("NB is Northbrook"); both sides must be values that actually appear in the files. Leave either null or empty otherwise. Never infer them from the data.
 7. Never invent a filename, a column name or a value. Copy them exactly as given to you. If the instruction asks for something the files cannot support, say so in "notes" and leave the corresponding part of the plan null.
 8. When you are shown what Atlas concluded on a previous read, the person is correcting that reading. Address what they raise, and repeat the parts of the plan that were right — the plan you return replaces the previous one entirely, so anything you leave out is undone.`;
 

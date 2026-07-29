@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
@@ -22,14 +23,6 @@ export const dynamic = "force-dynamic";
  * listed too — silently dropping half of what someone wrote is the fastest way
  * to lose their trust in the rest.
  */
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 export default async function BusinessContextPage({
   params,

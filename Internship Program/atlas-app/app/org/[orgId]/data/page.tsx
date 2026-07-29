@@ -1,3 +1,4 @@
+import { currency } from "@/lib/format/currency";
 import { notFound } from "next/navigation";
 import { Download, TriangleAlert } from "lucide-react";
 import { getCleaningLedger, getOrg, getSourceFiles } from "@/db/repo";
@@ -18,14 +19,6 @@ export const dynamic = "force-dynamic";
 
 /** How many rows the page renders before it stops and points at the file. */
 const PREVIEW_ROWS = 250;
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 /**
  * The clean table, and the record of what was thrown away to get it.

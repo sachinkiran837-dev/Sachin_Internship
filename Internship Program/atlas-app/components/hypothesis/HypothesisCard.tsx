@@ -1,5 +1,6 @@
 "use client";
 
+import { currency } from "@/lib/format/currency";
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, CircleDashed, ThumbsDown, ThumbsUp } from "lucide-react";
@@ -18,14 +19,6 @@ import { Badge } from "@/components/ui/badge";
  * What is behind a click is the fourth part: what has to be true for the
  * argument to hold. That belongs on the card, but not ahead of it.
  */
-
-function currency(n: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 const NATURE_COPY: Record<PrizeNature, string> = {
   "cost-out": "Cost out — roles leave the establishment",

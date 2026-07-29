@@ -144,7 +144,7 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   );
 
   // A plan can carry facts the client stated in prose — "a full-time week is
-  // 38 hours", "AUH is AgeUp". Those change what a file *means*, not just how
+  // 38 hours", "NB is Northbrook". Those change what a file *means*, not just how
   // its files are bound, so the files have to be read again with them in
   // hand. One extra parse, no extra request, and it is the difference between
   // a correction that lands and one that is merely recorded.
