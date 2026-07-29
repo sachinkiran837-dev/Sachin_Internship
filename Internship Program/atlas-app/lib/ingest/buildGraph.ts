@@ -4,7 +4,7 @@ import { mapColumns } from "./columnMapper";
 import { pseudonymize } from "./anonymize";
 import { classifyRoles, roleKey, type RoleClassification } from "./classify";
 import { note, type IngestNote } from "./notes";
-import { groupDepartments, groupingNote } from "./functionGroups";
+import { groupPositions, groupingNote, resolveGroup, titleFallbackNote } from "./functionGroups";
 import {
   UNCLASSIFIED,
   type ColumnMapping,
@@ -150,7 +150,7 @@ export async function buildOrgGraph(
   file: ParsedFile,
   options: BuildGraphOptions
 ): Promise<BuildGraphResult> {
-  const columnMapping = mapColumns(file.headers);
+  const columnMapping = mapColumns(file.headers, file.rows);
   const issues: IngestIssue[] = [];
 
   const nameCol = sourceColumnFor(columnMapping, "name");
@@ -434,7 +434,9 @@ export async function buildOrgGraph(
   // The rollup, computed once over the distinct department names rather than
   // once per position — a client file carries a thousand rows and sixty
   // departments, and the difference is one request against a thousand.
-  const grouping = await groupDepartments(resolved.map((r) => r.row.department));
+  const grouping = await groupPositions(
+    resolved.map((r) => ({ department: r.row.department, title: r.row.title }))
+  );
   const distinctDepartments = new Set(resolved.map((r) => r.row.department)).size;
 
   const positions: Position[] = resolved.map((r) => {
@@ -475,7 +477,7 @@ export async function buildOrgGraph(
         : r.row.rawName,
       title: r.row.title,
       department: r.row.department,
-      functionGroup: grouping.map.get(r.row.department) ?? r.row.department,
+      functionGroup: resolveGroup(grouping, r.row.department, r.row.title),
       managerId: r.managerId,
       cost: r.row.cost,
       fte: r.row.fte,
@@ -496,6 +498,9 @@ export async function buildOrgGraph(
     notes: [
       ...agencyNote(positions, Boolean(fteCol)),
       ...(groupingNote(grouping, distinctDepartments) ? [groupingNote(grouping, distinctDepartments)!] : []),
+      ...(titleFallbackNote(grouping, positions.length)
+        ? [titleFallbackNote(grouping, positions.length)!]
+        : []),
     ],
   };
 }

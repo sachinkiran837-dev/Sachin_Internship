@@ -186,7 +186,10 @@ function normalise(
   answers: IngestAnswers
 ): NormalisedFile {
   const filePlan = plan?.files.find((f) => f.filename === file.filename) ?? null;
-  const mapping = applyOverrides(mapColumns(file.parsed.headers), filePlan?.columns ?? {});
+  const mapping = applyOverrides(
+    mapColumns(file.parsed.headers, file.parsed.rows),
+    filePlan?.columns ?? {}
+  );
 
   const fields = new Set<CanonicalField>();
   const extras: string[] = [];

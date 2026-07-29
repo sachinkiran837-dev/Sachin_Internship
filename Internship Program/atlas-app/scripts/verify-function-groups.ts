@@ -12,7 +12,14 @@ import { cleanRows } from "../lib/canonical/clean";
 import { buildCanonicalTable } from "../lib/canonical/table";
 import { analyseFunctions } from "../lib/analysis/functions";
 import { EMPTY_BUSINESS } from "../lib/hypothesis/context";
-import { FUNCTION_GROUPS, groupByRule, groupDepartments } from "../lib/ingest/functionGroups";
+import {
+  FUNCTION_GROUPS,
+  groupByRule,
+  groupDepartments,
+  groupPositions,
+  resolveGroup,
+} from "../lib/ingest/functionGroups";
+import { mapColumns } from "../lib/ingest/columnMapper";
 import { analysePlay } from "../lib/scenario/plays";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -210,6 +217,84 @@ async function main() {
     `   ${consolidation.candidates.length} merge candidate${consolidation.candidates.length === 1 ? "" : "s"}, ` +
       `every one inside a real department rather than across a function.\n`
   );
+
+  /* ---------------------------------------------------------------- */
+  console.log("7. A pay-basis column is not a department");
+
+  // The bug this exists to prevent: "RateUnit" contains the word "unit", so
+  // 756 people were filed in a department called "Hourly" and 104 in one
+  // called "Annually". The header cannot settle it; the values can.
+  const payBasis = [
+    { ID: "1", Name: "Chief", JobTitle: "Chief Executive", RateUnit: "Annually", Rate: "320000" },
+    ...Array.from({ length: 20 }, (_, i) => ({
+      ID: String(i + 2),
+      Name: `Carer ${i}`,
+      JobTitle: "Care Companion",
+      RateUnit: i % 3 === 0 ? "Annually" : "Hourly",
+      Rate: i % 3 === 0 ? "72000" : "34.42",
+    })),
+  ];
+  const headers = Object.keys(payBasis[0]);
+  const blind = mapColumns(headers).find((m) => m.targetField === "department")?.sourceColumn;
+  const seeing = mapColumns(headers, payBasis).find((m) => m.targetField === "department")
+    ?.sourceColumn;
+
+  assert(blind === "RateUnit", `the header alone should still look like a department, got ${blind}`);
+  assert(!seeing, `with the values to hand, no column should claim department — got "${seeing}"`);
+  console.log(`   "RateUnit" claims department on its header, and loses it on its values`);
+
+  // A real department whose values happen to include a contract-like word is
+  // not thrown away — the test has to be unanimous.
+  const realDepartment = [
+    { ID: "1", Name: "A", Department: "Casual Pool" },
+    { ID: "2", Name: "B", Department: "Finance" },
+    { ID: "3", Name: "C", Department: "Operations" },
+  ];
+  const kept = mapColumns(Object.keys(realDepartment[0]), realDepartment).find(
+    (m) => m.targetField === "department"
+  )?.sourceColumn;
+  assert(kept === "Department", `a genuine department column must survive, got ${kept}`);
+  console.log(`   A "Casual Pool" department alongside Finance and Operations survives\n`);
+
+  /* ---------------------------------------------------------------- */
+  console.log("8. A division full of every function is not a function");
+
+  // "Platform" places cleanly into Technology and holds the finance team, the
+  // HR team and the quality team. Believing the column heading files all of
+  // them under Technology and nothing on screen looks wrong.
+  const division: { department: string; title: string }[] = [
+    ...Array.from({ length: 12 }, () => ({ department: "Platform", title: "P&C" })),
+    ...Array.from({ length: 11 }, () => ({ department: "Platform", title: "Finance" })),
+    ...Array.from({ length: 5 }, () => ({ department: "Platform", title: "Quality" })),
+    ...Array.from({ length: 3 }, () => ({ department: "Platform", title: "Growth" })),
+    // A genuine Finance department in the same file, to prove the check is
+    // about disagreement rather than about distrusting every department.
+    ...Array.from({ length: 8 }, () => ({ department: "Finance", title: "Financial Accountant" })),
+  ];
+
+  const g = await groupPositions(division);
+  assert(g.overruled.has("Platform"), "a division whose jobs disagree with it must be set aside");
+  assert(!g.overruled.has("Finance"), "a department whose jobs agree with it must be believed");
+  assert(
+    resolveGroup(g, "Platform", "Finance") === "Finance",
+    `a finance team inside "Platform" must read as Finance, got ${resolveGroup(g, "Platform", "Finance")}`
+  );
+  assert(
+    resolveGroup(g, "Platform", "P&C") === "People",
+    `an HR team inside "Platform" must read as People, got ${resolveGroup(g, "Platform", "P&C")}`
+  );
+  assert(
+    resolveGroup(g, "Finance", "Financial Accountant") === "Finance",
+    "a believed department must still answer for its own people"
+  );
+  // Once a department is disbelieved, it cannot quietly answer for the people
+  // inside it whose titles say nothing either.
+  assert(
+    resolveGroup(g, "Platform", "Zenith Lead") === "Platform",
+    `a disbelieved department must keep its raw name, got ${resolveGroup(g, "Platform", "Zenith Lead")}`
+  );
+  console.log(`   "Platform" set aside; its finance staff read as Finance, its HR staff as People`);
+  console.log(`   "Finance" believed, because the jobs inside it agree with it\n`);
 
   console.log("verify-function-groups PASS");
 }

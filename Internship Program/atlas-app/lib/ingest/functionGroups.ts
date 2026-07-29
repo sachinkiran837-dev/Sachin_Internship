@@ -86,10 +86,23 @@ export function groupByRule(department: string): string | null {
 export interface Grouping {
   /** Raw department name → the bucket it belongs to. */
   map: Map<string, string>;
+  /**
+   * Job title → bucket, consulted only where the department could not place
+   * one. Empty on any file that states departments Atlas can read.
+   */
+  byTitle: Map<string, string>;
+  /**
+   * Departments that placed cleanly but were disbelieved, because the jobs
+   * inside them mostly belong to a different function. A "Division" column
+   * naming service lines lands here.
+   */
+  overruled: Set<string>;
   byRule: number;
   byModel: number;
   /** Departments that kept their own name because nothing would place them. */
   unplaced: string[];
+  /** Positions whose function had to be read off their job title. */
+  fromTitle: number;
   source: "rules" | "rules+ai";
 }
 
@@ -148,48 +161,11 @@ export async function groupDepartments(departments: string[]): Promise<Grouping>
 
   const byRule = map.size - (map.has(UNCLASSIFIED) ? 1 : 0);
 
-  if (leftover.length === 0 || leftover.length > MAX_MODEL_NAMES || !hasAI()) {
-    for (const department of leftover) map.set(department, department);
-    return { map, byRule, byModel: 0, unplaced: leftover, source: "rules" };
-  }
-
   let byModel = 0;
   const unplaced: string[] = [];
 
-  try {
-    const answer = await ask({
-      maxTokens: 2000,
-      tool: GROUPING_TOOL,
-      prompt:
-        `These are department names from one organisation's establishment file. Place each into the ` +
-        `business function group it belongs to.\n\n` +
-        `Groups: ${FUNCTION_GROUPS.join(", ")}\n\n` +
-        `Departments:\n${leftover.map((d) => `- ${d}`).join("\n")}\n\n` +
-        `Rules: copy each department name exactly as given. Judge by what the team does, not by ` +
-        `what the words look like. Where no group is clearly right, answer "unplaced" — a wrong ` +
-        `placement is worse than none, because everything downstream compares these groups against ` +
-        `each other.`,
-    });
-
-    const placements =
-      ((answer.toolInput as { placements?: { department?: string; group?: string }[] } | null)
-        ?.placements ?? []);
-    const valid = new Set(FUNCTION_GROUPS);
-    const wanted = new Map(leftover.map((d) => [d.toLowerCase(), d]));
-
-    for (const placement of placements) {
-      // Matched back against the names actually sent, so a model that invents
-      // a department or renames one cannot introduce a group for nobody.
-      const department = wanted.get((placement.department ?? "").trim().toLowerCase());
-      if (!department || map.has(department)) continue;
-      if (!placement.group || !valid.has(placement.group)) continue;
-      map.set(department, placement.group);
-      byModel++;
-    }
-  } catch {
-    // The establishment is fine; only the rollup is missing. Every unplaced
-    // department keeps its own name, which is exactly how Atlas behaved
-    // before this existed.
+  if (leftover.length > 0 && leftover.length <= MAX_MODEL_NAMES && hasAI()) {
+    byModel = await placeWithModel(leftover, map, "department");
   }
 
   for (const department of leftover) {
@@ -199,7 +175,186 @@ export async function groupDepartments(departments: string[]): Promise<Grouping>
     }
   }
 
-  return { map, byRule, byModel, unplaced, source: byModel > 0 ? "rules+ai" : "rules" };
+  return {
+    map,
+    byTitle: new Map(),
+    overruled: new Set(),
+    byRule,
+    byModel,
+    unplaced,
+    fromTitle: 0,
+    source: byModel > 0 ? "rules+ai" : "rules",
+  };
+}
+
+/**
+ * Below this many placeable job titles inside a department, the jobs are not
+ * evidence about the department — they are a handful of people.
+ */
+const MIN_TITLE_EVIDENCE = 6;
+
+/**
+ * The share of those jobs that must agree with the department's own placement
+ * for the department to be believed.
+ */
+const MIN_AGREEMENT = 0.5;
+
+/**
+ * The function every position sits in, given whatever the files said.
+ *
+ * Departments are the answer wherever a file states one Atlas can place. Two
+ * things go wrong with that on real files, and both were seen on the first
+ * client establishment this ran against.
+ *
+ * The first is a file with no department column at all. A payroll export
+ * carries an employee ID, a job title, an FTE and a rate, and nothing about
+ * which part of the organisation the person works in — leaving the whole
+ * establishment as one function called "Unclassified" with nothing to compare.
+ * There the job title is read instead: a Registered Nurse is in Operations and
+ * a Payroll Officer is in Finance, and a file that names one names the other.
+ *
+ * The second is subtler and worse, because it looks like it worked. A column
+ * headed "Division" holding "Head Office", "Platform" and "HCP" is a service
+ * line or a location, not a function — and "Platform" places cleanly into
+ * Technology, so twelve HR staff and sixteen finance staff inside it are filed
+ * under Technology and the comparison is nonsense with no visible error.
+ *
+ * That case is caught by looking at the jobs inside each department. A real
+ * Finance department is full of finance titles. A division is full of
+ * everything — and where the jobs inside a department mostly disagree with the
+ * department's own placement, the jobs win, because thirty people's job titles
+ * are better evidence about what they do than one column heading.
+ */
+export async function groupPositions(
+  positions: { department: string; title: string }[]
+): Promise<Grouping> {
+  const grouping = await groupDepartments(positions.map((p) => p.department));
+  const real = new Set(FUNCTION_GROUPS);
+  const titleOf = (p: { title: string }) => p.title.trim();
+
+  // Every distinct title, placed by rule alone. Deterministic and free, and
+  // needed here whether or not it ends up being used, because it is the
+  // evidence the department column is judged against.
+  const byTitle = new Map<string, string>();
+  for (const title of new Set(positions.map(titleOf).filter(Boolean))) {
+    const placed = groupByRule(title);
+    if (placed) byTitle.set(title, placed);
+  }
+
+  // A department is only a function if the jobs inside it say so.
+  const overruled = new Set<string>();
+  for (const [department, group] of grouping.map) {
+    if (!real.has(group)) continue;
+    const evidence = positions
+      .filter((p) => p.department === department)
+      .map((p) => byTitle.get(titleOf(p)))
+      .filter((g): g is string => Boolean(g));
+    if (evidence.length < MIN_TITLE_EVIDENCE) continue;
+    const agreeing = evidence.filter((g) => g === group).length;
+    if (agreeing / evidence.length < MIN_AGREEMENT) overruled.add(department);
+  }
+
+  // Positions the department column cannot answer for: it named nothing
+  // placeable, or it named a division the jobs inside it contradict.
+  const orphaned = positions.filter(
+    (p) => !real.has(grouping.map.get(p.department) ?? "") || overruled.has(p.department)
+  );
+  if (orphaned.length === 0) return grouping;
+
+  const stillOut = [...new Set(orphaned.map(titleOf).filter(Boolean))].filter(
+    (t) => !byTitle.has(t)
+  );
+
+  let byModel = grouping.byModel;
+  if (stillOut.length > 0 && stillOut.length <= MAX_MODEL_NAMES && hasAI()) {
+    byModel += await placeWithModel(stillOut, byTitle, "job title");
+  }
+
+  const fromTitle = orphaned.filter((p) => real.has(byTitle.get(titleOf(p)) ?? "")).length;
+
+  return {
+    ...grouping,
+    byTitle,
+    overruled,
+    byModel,
+    fromTitle,
+    source: byModel > 0 ? "rules+ai" : "rules",
+  };
+}
+
+/** The function this position belongs to, on the best evidence available. */
+export function resolveGroup(
+  grouping: Grouping,
+  department: string,
+  title: string
+): string {
+  const real = new Set(FUNCTION_GROUPS);
+  const byDepartment = grouping.map.get(department);
+  const trusted = byDepartment && real.has(byDepartment) && !grouping.overruled.has(department);
+  if (trusted) return byDepartment;
+
+  const byTitle = grouping.byTitle.get(title.trim());
+  if (byTitle && real.has(byTitle)) return byTitle;
+
+  // Nothing placed it. The department keeps its own name, exactly as it was
+  // stated — including UNCLASSIFIED, which is a true statement about a file
+  // that never said. A department already disbelieved keeps its raw name too:
+  // having decided "Platform" is a place rather than a function, filing the
+  // people in it whose titles said nothing under Technology anyway would put
+  // back exactly the error the check exists to catch.
+  if (grouping.overruled.has(department)) return department;
+  return byDepartment ?? department;
+}
+
+/**
+ * Asks the model to place the names no keyword claimed, writing only into
+ * slots still empty. Returns how many it filled.
+ */
+async function placeWithModel(
+  names: string[],
+  into: Map<string, string>,
+  kind: "department" | "job title"
+): Promise<number> {
+  let placed = 0;
+
+  try {
+    const answer = await ask({
+      maxTokens: 2000,
+      tool: GROUPING_TOOL,
+      prompt:
+        `These are ${kind}s from one organisation's establishment file. Place each into the ` +
+        `business function group it belongs to.\n\n` +
+        `Groups: ${FUNCTION_GROUPS.join(", ")}\n\n` +
+        `${kind === "department" ? "Departments" : "Job titles"}:\n` +
+        `${names.map((d) => `- ${d}`).join("\n")}\n\n` +
+        `Rules: copy each name exactly as given. Judge by what the ` +
+        `${kind === "department" ? "team does" : "person does"}, not by what the words look like. ` +
+        `Where no group is clearly right, answer "unplaced" — a wrong placement is worse than none, ` +
+        `because everything downstream compares these groups against each other.`,
+    });
+
+    const placements =
+      ((answer.toolInput as { placements?: { department?: string; group?: string }[] } | null)
+        ?.placements ?? []);
+    const valid = new Set(FUNCTION_GROUPS);
+    const wanted = new Map(names.map((d) => [d.toLowerCase(), d]));
+
+    for (const placement of placements) {
+      // Matched back against the names actually sent, so a model that invents
+      // a name or renames one cannot introduce a group for nobody.
+      const name = wanted.get((placement.department ?? "").trim().toLowerCase());
+      if (!name || into.has(name)) continue;
+      if (!placement.group || !valid.has(placement.group)) continue;
+      into.set(name, placement.group);
+      placed++;
+    }
+  } catch {
+    // The establishment is fine; only the rollup is missing. Every unplaced
+    // name keeps its own, which is exactly how Atlas behaved before this
+    // existed.
+  }
+
+  return placed;
 }
 
 /**
@@ -214,9 +369,9 @@ export function groupingNote(grouping: Grouping, total: number): IngestNote | nu
   const placed = grouping.byRule + grouping.byModel;
   if (placed === 0) return null;
 
-  const used = [...new Set([...grouping.map.values()])].filter(
-    (g) => FUNCTION_GROUPS.includes(g)
-  );
+  const used = [
+    ...new Set([...grouping.map.values(), ...grouping.byTitle.values()]),
+  ].filter((g) => FUNCTION_GROUPS.includes(g));
 
   return note("function-groups", "assumption", {
     topic: "Departments rolled up",
@@ -237,5 +392,49 @@ export function groupingNote(grouping: Grouping, total: number): IngestNote | nu
       `Sixty departments cannot be compared against each other — most are below the size where a ratio ` +
       `means anything, so the comparison would describe whichever teams happened to be large. ` +
       `Grouped, "which function is bloated" is answered about ${used[0] ?? "a function"} rather than about one team inside it.`,
+  });
+}
+
+/**
+ * States, separately, where a function was read off a job title.
+ *
+ * This is a weaker reading than a department column and it has a specific
+ * failure the client is the only one who can catch: a Finance Manager sitting
+ * inside an operating division is filed under Finance by their title, which
+ * describes their job rather than where they sit. It is worth doing anyway —
+ * the alternative is one function called "Unclassified" and nothing to
+ * compare — but it is not worth hiding inside the rollup note.
+ */
+export function titleFallbackNote(
+  grouping: Grouping,
+  total: number
+): IngestNote | null {
+  if (grouping.fromTitle === 0) return null;
+
+  const used = [...new Set(grouping.byTitle.values())].filter((g) =>
+    FUNCTION_GROUPS.includes(g)
+  );
+  const overruled = [...grouping.overruled];
+
+  return note("function-from-title", "assumption", {
+    topic: "Function read from job title",
+    statement:
+      `${grouping.fromTitle.toLocaleString()} of ${total.toLocaleString()} positions had no department ` +
+      `Atlas could use, so their function was read from their job title instead.`,
+    evidence:
+      `${grouping.byTitle.size} distinct job title${grouping.byTitle.size === 1 ? "" : "s"} were ` +
+      `placed into ${used.length} function${used.length === 1 ? "" : "s"} — ${used.join(", ")}.` +
+      (overruled.length > 0
+        ? ` ${overruled.length === 1 ? "One department was" : `${overruled.length} departments were`} ` +
+          `set aside as ${overruled.length === 1 ? "a division rather than a function" : "divisions rather than functions"} — ` +
+          `${overruled.join(", ")} — because most of the jobs inside ${overruled.length === 1 ? "it" : "them"} ` +
+          `belong to a different function. A department called "Platform" holding finance and HR staff is a ` +
+          `place, not a function.`
+        : ""),
+    effect:
+      `Every comparison on the findings screen counts these people. A title says what someone does, ` +
+      `not which part of the organisation they sit in — so a Finance Manager inside an operating ` +
+      `division counts against Finance here. The department each person is in is unchanged and every ` +
+      `scenario play still works on it.`,
   });
 }
