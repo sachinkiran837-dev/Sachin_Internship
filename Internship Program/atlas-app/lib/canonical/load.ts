@@ -14,11 +14,27 @@ import { buildCanonicalTable, type CanonicalTable, type SuppliedFields } from ".
  * them is worth going back to the client about.
  */
 export async function loadCanonicalTable(orgId: string): Promise<CanonicalTable> {
-  const [positions, files, plan] = await Promise.all([
+  const [positions, options] = await Promise.all([
     getBaselinePositions(orgId),
-    getSourceFiles(orgId),
-    getIngestPlan(orgId),
+    canonicalOptions(orgId),
   ]);
+
+  return buildCanonicalTable(positions, options.supplied, options.brandLabel);
+}
+
+/**
+ * How to build the canonical table for an establishment, without deciding
+ * which positions to build it from.
+ *
+ * Split out because the map shows either the baseline or an open scenario, and
+ * its filters are the canonical table's columns — so it has to build the table
+ * over the positions on screen. Sharing this rather than repeating it is what
+ * keeps the map's Function list and the table's Function column the same list.
+ */
+export async function canonicalOptions(
+  orgId: string
+): Promise<{ supplied: SuppliedFields; brandLabel: string }> {
+  const [files, plan] = await Promise.all([getSourceFiles(orgId), getIngestPlan(orgId)]);
 
   const contributed = new Set(files.flatMap((f) => f.contributedFields));
   const supplied: SuppliedFields = {
@@ -34,5 +50,5 @@ export async function loadCanonicalTable(orgId: string): Promise<CanonicalTable>
   const label = plan?.groupBy?.label;
   const brandLabel = label ? label.charAt(0).toUpperCase() + label.slice(1) : "Brand";
 
-  return buildCanonicalTable(positions, supplied, brandLabel);
+  return { supplied, brandLabel };
 }

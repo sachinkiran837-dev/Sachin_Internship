@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import {
   Background,
   Controls,
@@ -14,11 +21,15 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { SlidersHorizontal } from "lucide-react";
+
 import { tagNodes } from "@/lib/graph/tagging";
 import { computeVisibleLayout } from "@/lib/graph/layout";
 import { getAncestorIds, getDescendantIds } from "@/lib/graph/descendants";
 import { nearestCandidate } from "@/lib/graph/hitTest";
-import { UNCLASSIFIED, type Position } from "@/lib/graph/types";
+import { type LayoutNode, type Position } from "@/lib/graph/types";
+import { bandOf, NOT_STATED, type Facet } from "@/lib/canonical/facets";
+import type { CanonicalRow } from "@/lib/canonical/table";
 import { reassignPosition } from "@/lib/scenario/mutate";
 import { OrgNodeCard, type OrgNodeData } from "./OrgNodeCard";
 import { DetailPanel } from "./DetailPanel";
@@ -28,6 +39,131 @@ import { Label } from "@/components/ui/label";
 
 const nodeTypes = { orgNode: OrgNodeCard };
 const MAX_DROP_DISTANCE = 300;
+
+/** The "not filtering on this" value, kept out of the facet options. */
+const ALL = "all";
+
+/* ------------------------------------------------------------------ */
+/* Which filters this person wants on screen, remembered per org.     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Eight filters is more than anyone works with at once, and fewer than some
+ * clients need — a group operator lives in the Brand filter, a single-entity
+ * client has no use for it. So the choice is theirs and it sticks, because
+ * re-picking it on every visit is the small friction that makes a tool feel
+ * like it is not listening.
+ *
+ * Read through useSyncExternalStore rather than an effect: localStorage does
+ * not exist while the page is rendered on the server, and the server snapshot
+ * is what stops the first client render disagreeing with the HTML it hydrates.
+ */
+const listeners = new Set<() => void>();
+
+function subscribe(onChange: () => void): () => void {
+  listeners.add(onChange);
+  // Another tab changing it counts too — the same person, the same preference.
+  window.addEventListener("storage", onChange);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function readStored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    // Private browsing, or a blocked origin. Defaults, and no error on screen.
+    return null;
+  }
+}
+
+function writeStored(key: string, keys: string[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(keys));
+  } catch {
+    // The choice holds for this visit and no longer.
+  }
+  for (const listener of listeners) listener();
+}
+
+/** The saved keys, or null when nothing valid is saved. */
+function parseStored(raw: string | null, facets: Facet[]): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    // A facet that no longer exists — a Brand filter on an establishment that
+    // is no longer consolidated — is dropped rather than left as a dead key.
+    return parsed.filter((k): k is string => typeof k === "string" && facets.some((f) => f.key === k));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a node satisfies one filter.
+ *
+ * Everything but the flags is read off the canonical row, which is the whole
+ * point: the map and the table then filter and display the same figures, and
+ * cannot disagree about which function someone is in.
+ *
+ * The flags are a predicate rather than a value because a position can carry
+ * several at once — a vacant role can also be a wide span — so asking for
+ * vacancies must not be answered with whichever flag happens to be checked
+ * first.
+ */
+function facetMatches(
+  facet: Facet,
+  want: string,
+  node: LayoutNode,
+  row: CanonicalRow | undefined
+): boolean {
+  if (facet.kind === "flag") {
+    const f = node.flags;
+    switch (want) {
+      case "protected":
+        return f.protected !== null;
+      case "vacant":
+        return f.vacant;
+      case "contingent":
+        return f.contingent;
+      case "thin":
+        return f.spanHealth === "thin";
+      case "wide":
+        return f.spanHealth === "wide";
+      case "singleReport":
+        return f.singleReport;
+      case "keyPerson":
+        return f.keyPerson;
+      default:
+        return true;
+    }
+  }
+
+  if (!row) return want === NOT_STATED;
+
+  if (facet.kind === "band") {
+    const value =
+      facet.key === "fte" ? row.fte : facet.key === "salary" ? row.salary : row.annualCost;
+    return bandOf(facet, value) === want;
+  }
+
+  const text =
+    facet.key === "function"
+      ? row.department
+      : facet.key === "departmentAsStated"
+        ? row.departmentAsStated
+        : facet.key === "manager"
+          ? row.manager
+          : facet.key === "employmentType"
+            ? row.employmentType
+            : row.brand;
+
+  const value = text.trim();
+  return (value === "" ? NOT_STATED : value) === want;
+}
 
 function computeTeamSize(positions: Position[], id: string): { size: number; cost: number } {
   const descendants = getDescendantIds(positions, id);
@@ -41,25 +177,21 @@ function computeTeamSize(positions: Position[], id: string): { size: number; cos
   return { size: descendants.size + 1, cost };
 }
 
-export function EstablishmentMap({
-  orgId,
-  scenarioId,
-  positions,
-  rootId,
-}: {
+export interface MapProps {
   orgId: string;
   scenarioId: string | null;
   positions: Position[];
   rootId: string | null;
-}) {
+  /** The canonical table for these positions. What the filters read. */
+  rows: CanonicalRow[];
+  /** Which columns can be filtered on, derived from those rows. */
+  facets: Facet[];
+}
+
+export function EstablishmentMap(props: MapProps) {
   return (
     <ReactFlowProvider>
-      <EstablishmentMapInner
-        orgId={orgId}
-        scenarioId={scenarioId}
-        positions={positions}
-        rootId={rootId}
-      />
+      <EstablishmentMapInner {...props} />
     </ReactFlowProvider>
   );
 }
@@ -69,45 +201,17 @@ function EstablishmentMapInner({
   scenarioId,
   positions,
   rootId,
-}: {
-  orgId: string;
-  scenarioId: string | null;
-  positions: Position[];
-  rootId: string | null;
-}) {
+  rows,
+  facets,
+}: MapProps) {
   const layoutNodes = useMemo(() => tagNodes(positions, rootId), [positions, rootId]);
   const byId = useMemo(() => new Map(layoutNodes.map((n) => [n.id, n] as const)), [layoutNodes]);
-  /**
-   * The functions in the canonical table, and nothing else.
-   *
-   * Read from the same field that table reads, so the two screens never
-   * disagree about what functions this organisation has. Brand headings are
-   * excluded because they are scaffolding rather than jobs and carry the brand
-   * name in the department field, which put trading names in the list. Rows
-   * with no function are gathered under one option rather than appearing as
-   * the internal "Unclassified" sentinel — finding them on the map is exactly
-   * how someone chases down a gap, so the option stays, spelled the way the
-   * canonical table spells it.
-   */
-  const departments = useMemo(() => {
-    const counts = new Map<string, number>();
-    let unstated = 0;
 
-    for (const p of positions) {
-      if (p.synthetic) continue;
-      const name = p.functionGroup.trim();
-      if (name === "" || name === UNCLASSIFIED) {
-        unstated++;
-        continue;
-      }
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-    }
-
-    return {
-      named: [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])),
-      unstated,
-    };
-  }, [positions]);
+  /** The canonical row for each position, so the filters read the table. */
+  const rowById = useMemo(
+    () => new Map(rows.map((r) => [r.positionId, r] as const)),
+    [rows]
+  );
 
   // User-driven expand/collapse toggles only. Filter/search-driven visibility
   // is layered on top as a derived value (effectiveExpandedIds) rather than
@@ -116,34 +220,68 @@ function EstablishmentMapInner({
     rootId ? new Set([rootId]) : new Set()
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filterDept, setFilterDept] = useState("all");
-  const [filterFlag, setFilterFlag] = useState("all");
+  /** Facet key → the chosen value. A key absent from here is not filtering. */
+  const [selection, setSelection] = useState<Record<string, string>>({});
+  const [choosing, setChoosing] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dragOverride, setDragOverride] = useState<{ id: string; x: number; y: number } | null>(null);
   const [, startTransition] = useTransition();
   const { setCenter, fitView } = useReactFlow();
 
+  const storageKey = `atlas:map-filters:${orgId}`;
+  const stored = useSyncExternalStore(
+    subscribe,
+    () => readStored(storageKey),
+    () => null
+  );
+
+  const shown = useMemo(
+    () => parseStored(stored, facets) ?? facets.filter((f) => f.defaultOn).map((f) => f.key),
+    [stored, facets]
+  );
+
+  const setShownAndRemember = useCallback(
+    (keys: string[]) => {
+      // Clearing a filter's box has to clear the filter too, or the map stays
+      // narrowed by a control nobody can see any more.
+      setSelection((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([k]) => keys.includes(k)))
+      );
+      writeStored(storageKey, keys);
+    },
+    [storageKey]
+  );
+
+  const visibleFacets = useMemo(
+    () => facets.filter((f) => shown.includes(f.key)),
+    [facets, shown]
+  );
+
+  const active = useMemo(
+    () => Object.entries(selection).filter(([, v]) => v && v !== ALL),
+    [selection]
+  );
+
   const matches = useMemo(() => {
-    const hasFilter = filterDept !== "all" || filterFlag !== "all" || search.trim() !== "";
-    if (!hasFilter) return new Set<string>();
+    if (active.length === 0 && search.trim() === "") return new Set<string>();
 
     const q = search.trim().toLowerCase();
+    const byKey = new Map(facets.map((f) => [f.key, f] as const));
+
     return new Set(
       layoutNodes
         .filter((n) => {
-          if (filterDept !== "all" && n.functionGroup !== filterDept) return false;
-          if (filterFlag !== "all") {
-            const flagMatch =
-              (filterFlag === "protected" && n.flags.protected) ||
-              (filterFlag === "vacant" && n.flags.vacant) ||
-              (filterFlag === "contingent" && n.flags.contingent) ||
-              (filterFlag === "thin" && n.flags.spanHealth === "thin") ||
-              (filterFlag === "wide" && n.flags.spanHealth === "wide") ||
-              (filterFlag === "singleReport" && n.flags.singleReport) ||
-              (filterFlag === "keyPerson" && n.flags.keyPerson);
-            if (!flagMatch) return false;
+          // Headings are scaffolding, not people, and carry no canonical row.
+          if (n.synthetic) return false;
+          const row = rowById.get(n.id);
+
+          for (const [key, want] of active) {
+            const facet = byKey.get(key);
+            if (!facet) continue;
+            if (!facetMatches(facet, want, n, row)) return false;
           }
+
           if (q && !n.title.toLowerCase().includes(q) && !n.displayName.toLowerCase().includes(q)) {
             return false;
           }
@@ -151,9 +289,9 @@ function EstablishmentMapInner({
         })
         .map((n) => n.id)
     );
-  }, [layoutNodes, filterDept, filterFlag, search]);
+  }, [layoutNodes, rowById, facets, active, search]);
 
-  const hasActiveFilter = matches.size > 0 || filterDept !== "all" || filterFlag !== "all" || search.trim() !== "";
+  const hasActiveFilter = active.length > 0 || search.trim() !== "";
 
   const ancestorsOfMatches = useMemo(() => {
     const result = new Set<string>();
@@ -228,8 +366,7 @@ function EstablishmentMapInner({
   }, [rootId, fitView]);
 
   const resetFilters = useCallback(() => {
-    setFilterDept("all");
-    setFilterFlag("all");
+    setSelection({});
     setSearch("");
   }, []);
 
@@ -349,64 +486,59 @@ function EstablishmentMapInner({
             className="w-56"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="map-dept" className="text-xs text-muted-foreground">
-            Function
-          </Label>
-          <select
-            id="map-dept"
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
-          >
-            <option value="all">All functions ({departments.named.length})</option>
-            {departments.named.map(([name, count]) => (
-              <option key={name} value={name}>
-                {name} ({count.toLocaleString()})
+        {visibleFacets.map((facet) => (
+          <div key={facet.key} className="flex flex-col gap-1">
+            <Label htmlFor={`map-${facet.key}`} className="text-xs text-muted-foreground">
+              {facet.label}
+            </Label>
+            <select
+              id={`map-${facet.key}`}
+              className="h-9 max-w-56 rounded-md border border-input bg-transparent px-2 text-sm"
+              value={selection[facet.key] ?? ALL}
+              onChange={(e) =>
+                setSelection((prev) => ({ ...prev, [facet.key]: e.target.value }))
+              }
+            >
+              <option value={ALL}>
+                All ({facet.options.length})
               </option>
-            ))}
-            {departments.unstated > 0 && (
-              <option value={UNCLASSIFIED}>
-                Not stated ({departments.unstated.toLocaleString()})
-              </option>
-            )}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="map-flag" className="text-xs text-muted-foreground">
-            Flag
-          </Label>
-          <select
-            id="map-flag"
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-            value={filterFlag}
-            onChange={(e) => setFilterFlag(e.target.value)}
-          >
-            <option value="all">All flags</option>
-            <option value="protected">Protected</option>
-            <option value="vacant">Vacant</option>
-            <option value="contingent">Agency / contingent</option>
-            <option value="thin">Thin span</option>
-            <option value="wide">Wide span</option>
-            <option value="singleReport">Single-report</option>
-            <option value="keyPerson">Key person</option>
-          </select>
-        </div>
+              {facet.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
 
-        {hasActiveFilter && (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">
-              {matches.size} match{matches.size === 1 ? "" : "es"}
-            </span>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            {hasActiveFilter ? `${matches.size} match${matches.size === 1 ? "" : "es"}` : " "}
+          </span>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={resetFilters}
-              className="h-9 rounded-md border border-input px-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={() => setChoosing((v) => !v)}
+              aria-expanded={choosing}
+              className="flex h-9 items-center gap-1.5 rounded-md border border-input px-2 text-sm hover:bg-accent hover:text-accent-foreground"
             >
-              Clear filters
+              <SlidersHorizontal className="size-4" aria-hidden />
+              Filters
+              <span className="text-xs text-muted-foreground">
+                {visibleFacets.length}/{facets.length}
+              </span>
             </button>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="h-9 rounded-md border border-input px-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                Clear
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         <div className="ml-auto flex items-end gap-2">
           <button
@@ -424,6 +556,48 @@ function EstablishmentMapInner({
             Collapse to top
           </button>
         </div>
+
+        {choosing && (
+          <div className="w-full rounded-md border bg-accent/20 px-4 py-3">
+            <p className="mb-2 text-xs text-muted-foreground">
+              The columns of your canonical table. Pick the ones worth having on screen — the
+              choice is remembered for this establishment.
+            </p>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {facets.map((facet) => {
+                const on = shown.includes(facet.key);
+                return (
+                  <label
+                    key={facet.key}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        setShownAndRemember(
+                          on
+                            ? shown.filter((k) => k !== facet.key)
+                            : [...shown, facet.key]
+                        )
+                      }
+                      className="size-4 accent-primary"
+                    />
+                    {facet.label}
+                    <span className="text-xs text-muted-foreground">
+                      {facet.options.length}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {facets.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Nothing in this establishment has more than one distinct value to filter on.
+              </p>
+            )}
+          </div>
+        )}
 
         {error && <p className="w-full text-sm text-destructive">{error}</p>}
       </div>

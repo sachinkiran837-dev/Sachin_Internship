@@ -28,6 +28,13 @@ import { UNCLASSIFIED, type Position } from "@/lib/graph/types";
 export type EmploymentType = "Full-time" | "Part-time" | "Agency" | "Vacant" | "Not stated";
 
 export interface CanonicalRow {
+  /**
+   * The position this row describes. Carried so a screen showing the same
+   * establishment another way — the map — can filter on these columns rather
+   * than on its own reading of the positions, which is how the map's function
+   * list and the table's function column came to disagree.
+   */
+  positionId: string;
   /** 1. The person. Falls back to the position title where the file named nobody. */
   employee: string;
   /**
@@ -190,6 +197,7 @@ export function buildCanonicalTable(
     }
 
     return {
+      positionId: p.id,
       employee: p.displayName,
       department: p.functionGroup === UNCLASSIFIED ? "" : p.functionGroup,
       departmentAsStated: p.department === UNCLASSIFIED ? "" : p.department,
