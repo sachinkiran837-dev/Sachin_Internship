@@ -1,7 +1,21 @@
 import { currency } from "@/lib/format/currency";
 import { randomUUID } from "node:crypto";
 import type { Position } from "@/lib/graph/types";
-import { checkCycle, checkProtected, checkRoot, checkSynthetic } from "./guardrails";
+import { tagNodes } from "@/lib/graph/tagging";
+import { checkCycle, checkPostChangeSpan, checkProtected, checkRoot, checkSynthetic } from "./guardrails";
+
+/** Whether a position is currently staffing a clinical/frontline roster (A2) — E1's auto-hold input. */
+function isUnitRosterLead(positions: Position[], rootId: string | null, positionId: string): boolean {
+  return tagNodes(positions, rootId).find((n) => n.id === positionId)?.flags.unitRoster ?? false;
+}
+
+/** H1: whether a position's own manager is a roster lead — the position is a roster *member*, not the lead itself. Used by lib/scenario/patterns.ts to scope the roster exemption to the three management-chain patterns it actually applies to. */
+export function isRosterMember(positions: Position[], rootId: string | null, positionId: string): boolean {
+  const tagged = tagNodes(positions, rootId);
+  const managerId = tagged.find((n) => n.id === positionId)?.managerId;
+  if (!managerId) return false;
+  return tagged.find((n) => n.id === managerId)?.flags.unitRoster ?? false;
+}
 
 export interface MoveOutcome {
   positions: Position[];
@@ -58,7 +72,7 @@ export function reassign(
     return { positions, blocked: true, blockReason: syntheticGuard.reason, description: `Reassign "${position.title}"`, affectedIds: [positionId] };
   }
 
-  const protectedGuard = checkProtected(position);
+  const protectedGuard = checkProtected(position, isUnitRosterLead(positions, rootId, positionId));
   if (protectedGuard.blocked) {
     return {
       positions,
@@ -80,7 +94,30 @@ export function reassign(
     };
   }
 
+  // H1's roster exemption ("never touched by a management-chain move") is
+  // deliberately not checked here: `reassign` is the general-purpose
+  // primitive, and rebalancing reports *between* roster leads (the
+  // wide-span-redistribution play's whole purpose) is a legitimate roster
+  // operation, not a management-chain move reaching into a roster. The
+  // exemption is checked at the pattern level in `lib/scenario/patterns.ts`,
+  // scoped to the three patterns it actually means (collapse-layer,
+  // remove-single-report-chain, consolidate-to-shared-service) — checking it
+  // here blocked exactly the legitimate rebalancing this comment describes,
+  // caught live against wide-span-redistribution's own candidates.
   const next = positions.map((p) => (p.id === positionId ? { ...p, managerId: newManagerId } : p));
+
+  // H1: the receiving manager must stay inside their own archetype's span
+  // ceiling — checked against the real post-change position set, not a guess.
+  const spanGuard = checkPostChangeSpan(next, rootId, newManagerId);
+  if (spanGuard.blocked) {
+    return {
+      positions,
+      blocked: true,
+      blockReason: spanGuard.reason,
+      description: `Reassign "${position.title}"`,
+      affectedIds: [positionId],
+    };
+  }
   const newManager = positions.find((p) => p.id === newManagerId);
 
   return {
@@ -107,7 +144,7 @@ export function remove(positions: Position[], rootId: string | null, positionId:
     return { positions, blocked: true, blockReason: syntheticGuard.reason, description: `Remove "${position.title}"`, affectedIds: [positionId] };
   }
 
-  const protectedGuard = checkProtected(position);
+  const protectedGuard = checkProtected(position, isUnitRosterLead(positions, rootId, positionId));
   if (protectedGuard.blocked) {
     return {
       positions,
@@ -155,6 +192,10 @@ export function add(
     functionGroup:
       positions.find((p) => p.department === input.department && !p.synthetic)?.functionGroup ??
       input.department,
+    site: manager.site,
+    grade: null,
+    startDate: null,
+    vacantSince: null,
     managerId: input.managerId,
     cost: input.cost,
     fte: 1,
@@ -301,7 +342,7 @@ export function flatten(
 
     let removedOneThisPass = false;
     for (const candidate of candidates) {
-      const guard = checkProtected(candidate);
+      const guard = checkProtected(candidate, isUnitRosterLead(current, rootId, candidate.id));
       if (guard.blocked) {
         blockedByProtected = true;
         continue;

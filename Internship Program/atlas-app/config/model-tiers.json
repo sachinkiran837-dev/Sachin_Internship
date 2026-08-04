@@ -1,0 +1,7 @@
+{
+  "_note": "Model routing for the AI-shaped touchpoints that read free-form user context (business context, Ask Atlas queries, unparsed scenario moves). Three tiers, by how costly a wrong read is: low (closed classification, one right answer), medium (bounded structured extraction — today's existing default), high (open interpretation, vision, or synthesis).",
+  "_basis": "Only used when a caller passes AiRequest.tier — the 7 pre-existing AI call sites omit it and keep using aiModel()'s single default exactly as before. OpenAI's high tier is held at the same model as medium deliberately: unlike Anthropic's family, there isn't yet a confidently-safe 'next tier up' id to pin without risking a request that 404s on an account this hasn't been tested against.",
+  "low": { "anthropic": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini" },
+  "medium": { "anthropic": "claude-sonnet-5", "openai": "gpt-4o" },
+  "high": { "anthropic": "claude-opus-5", "openai": "gpt-4o" }
+}

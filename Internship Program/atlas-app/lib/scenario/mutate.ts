@@ -12,8 +12,9 @@ import {
   saveScenarioState,
 } from "@/db/repo";
 import { add, flatten, merge, reassign, rebase, remove, type MoveOutcome } from "./moves";
-import { parseScenarioText } from "./moveParser";
+import { parseScenarioText, type ParsedMove } from "./moveParser";
 import { analysePlay, getPlay } from "./plays";
+import { ask, hasAI, type AiTool } from "@/lib/ai/client";
 
 const DEFAULT_WHO = "Project Partner (local session)";
 
@@ -43,7 +44,9 @@ async function applyMutation(
   scenarioIdInput: string | null | undefined,
   runMove: (positions: Position[], rootId: string | null) => MoveOutcome,
   moveKind: MoveKind = "reassign",
-  who: string = DEFAULT_WHO
+  who: string = DEFAULT_WHO,
+  /** Stamped onto the audit trail and the returned description — visible-fallback for a move a model read rather than a regex. */
+  notePrefix?: string
 ): Promise<MutationResult> {
   const scenario = scenarioIdInput
     ? await getScenario(scenarioIdInput)
@@ -57,13 +60,14 @@ async function applyMutation(
   const rootId = getBaselineRootId(baseline);
 
   const outcome = runMove(scenario.positions, rootId);
+  const describe = (d: string) => (notePrefix ? `${notePrefix}${d}` : d);
 
   const auditEntry = {
     id: randomUUID(),
     scenarioId: scenario.id,
     positionId: outcome.affectedIds[0] ?? null,
     action: outcome.blocked ? "blocked" : "mutation",
-    detail: outcome.blocked ? (outcome.blockReason ?? "Blocked") : outcome.description,
+    detail: outcome.blocked ? (outcome.blockReason ?? "Blocked") : describe(outcome.description),
     who,
     when: new Date().toISOString(),
   };
@@ -82,7 +86,7 @@ async function applyMutation(
     id: randomUUID(),
     kind: moveKind,
     raw: outcome.description,
-    description: outcome.description,
+    description: describe(outcome.description),
     blocked: false,
     appliedAt: new Date().toISOString(),
   };
@@ -96,7 +100,7 @@ async function applyMutation(
   return {
     scenarioId: scenario.id,
     blocked: false,
-    description: outcome.description,
+    description: describe(outcome.description),
   };
 }
 
@@ -115,19 +119,116 @@ export async function reassignPosition(
   );
 }
 
+const PICK_MOVE: AiTool = {
+  name: "parse_move",
+  description:
+    "Read a plain-English scenario instruction into exactly one of Atlas's five move kinds, or say it's none of them. Extract only what the text actually names — never guess a role, unit or number that isn't stated.",
+  input_schema: {
+    type: "object",
+    properties: {
+      kind: { type: "string", enum: ["flatten", "merge", "remove", "reassign", "add", "none"] },
+      subject: { type: "string", description: "flatten only: the unit or division named." },
+      layers: { type: "integer", description: "flatten only: the target layer count." },
+      from: { type: "string", description: "merge only: the unit being merged away." },
+      into: { type: "string", description: "merge only: the unit it merges into." },
+      target: { type: "string", description: "remove/reassign only: the role named." },
+      newManager: { type: "string", description: "reassign only: the new manager's role, named." },
+      title: { type: "string", description: "add only: the new role's title." },
+      department: { type: "string", description: "add only: the unit or manager it reports under." },
+      cost: { type: "number", description: "add only: the annual cost, 0 if not stated." },
+    },
+    required: ["kind"],
+  },
+};
+
+/**
+ * The AI-shaped step in a typed scenario move, reached only once
+ * `parseScenarioText`'s regex matching has already found nothing. Same
+ * discipline as `hypothesis/read.ts` and Ask Atlas's `askModelForTool`: the
+ * model only ever reads the sentence into one of the five kinds
+ * `parseScenarioText` already knows how to build — it does not get a sixth
+ * kind, and it never decides whether the move is safe. `applyMutation`'s
+ * guardrail check runs on whatever comes back exactly as it runs on a
+ * regex-parsed move; a model-read move is not trusted any further than a
+ * typed one.
+ */
+async function askModelForMove(rawText: string): Promise<ParsedMove | null> {
+  if (!hasAI()) return null;
+  try {
+    const result = await ask({
+      tier: "medium",
+      maxTokens: 300,
+      timeoutMs: 15000,
+      system:
+        "You read a scenario instruction about an org chart into a structured move. You never decide whether the move should happen — only what it says.",
+      prompt: rawText,
+      tool: PICK_MOVE,
+    });
+    if (result.truncated || !result.toolInput) return null;
+    const input = result.toolInput as Record<string, unknown>;
+    const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+
+    switch (input.kind) {
+      case "flatten": {
+        const subject = str("subject");
+        const layers = Number(input.layers);
+        return subject && Number.isFinite(layers) ? { kind: "flatten", subject, layers } : null;
+      }
+      case "merge": {
+        const from = str("from");
+        const into = str("into");
+        return from && into ? { kind: "merge", from, into } : null;
+      }
+      case "remove": {
+        const target = str("target");
+        return target ? { kind: "remove", target } : null;
+      }
+      case "reassign": {
+        const target = str("target");
+        const newManager = str("newManager");
+        return target && newManager ? { kind: "reassign", target, newManager } : null;
+      }
+      case "add": {
+        const title = str("title");
+        const department = str("department");
+        if (!title || !department) return null;
+        const cost = Number(input.cost);
+        return { kind: "add", title, department, managerNeedle: department, cost: Number.isFinite(cost) ? cost : 0 };
+      }
+      default:
+        return null;
+    }
+  } catch {
+    // Falls back to the deterministic rejection below — visible-fallback,
+    // same as everywhere else a model call backs an engine decision.
+    return null;
+  }
+}
+
 /** Called by the scenario page's typed-move form (C5). */
 export async function submitScenarioMove(
   orgId: string,
   rawText: string,
   scenarioId?: string | null
 ): Promise<MutationResult> {
-  const parsed = parseScenarioText(rawText);
+  let parsed = parseScenarioText(rawText);
+  let aiRead = false;
+
+  if (parsed.kind === "unrecognized") {
+    const modelParsed = await askModelForMove(rawText);
+    if (modelParsed) {
+      parsed = modelParsed;
+      aiRead = true;
+    }
+  }
 
   if (parsed.kind === "unrecognized") {
     return {
       scenarioId: scenarioId ?? "",
       blocked: true,
-      blockReason: `Couldn't understand "${rawText}". Try phrasing like "flatten Operations to 3 layers", "merge Finance into Shared Services", "remove <title>", "reassign <title> to <title>", or "add a <title> under <title>".`,
+      blockReason: hasAI()
+        ? `Couldn't understand "${rawText}" — a model looked too and couldn't place it either. Try phrasing like "flatten Operations to 3 layers", "merge Finance into Shared Services", "remove <title>", "reassign <title> to <title>", or "add a <title> under <title>".`
+        : `Couldn't understand "${rawText}". Try phrasing like "flatten Operations to 3 layers", "merge Finance into Shared Services", "remove <title>", "reassign <title> to <title>", or "add a <title> under <title>".`,
       description: "",
     };
   }
@@ -176,7 +277,9 @@ export async function submitScenarioMove(
       }
     }
     },
-    parsed.kind
+    parsed.kind,
+    DEFAULT_WHO,
+    aiRead ? "Model-read from your text — " : undefined
   );
 }
 

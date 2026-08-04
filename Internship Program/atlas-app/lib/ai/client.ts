@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import modelTiers from "@/config/model-tiers.json";
 
 /**
  * The one place a model is spoken to, and the only place that knows which
@@ -77,6 +78,43 @@ export function aiModel(): string {
     : (process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5");
 }
 
+/**
+ * How costly a wrong read is, for a touchpoint that routes free-form user
+ * context to a model: `low` closed classification, `medium` bounded
+ * structured extraction, `high` open interpretation or synthesis. Resolves
+ * against `config/model-tiers.json`; a call site that never sets a tier
+ * keeps using {@link aiModel}'s single default, unaffected by this file.
+ *
+ * The full inventory of where Atlas ever asks a model to read something —
+ * kept here as the one place this list is written down, since three other
+ * files' doc comments point back to it rather than repeat it:
+ *   - Ingest (A): `parseVisual.ts` (chart/image), `readSource.ts` (free text),
+ *     `plan.ts` (column-binding plan), `reconcile.ts` (duplicate rows),
+ *     `functionGroups.ts` (department classification), `hypothesis/read.ts`
+ *     (business context) — all pre-existing.
+ *   - Ask Atlas (I3): `lib/ask/interpret.ts`'s `askModelForTool` — reached
+ *     only once keyword matching finds nothing; picks among the same 7 fixed
+ *     tools, never answers the query itself.
+ *   - Scenario moves (H): `lib/scenario/mutate.ts`'s `askModelForMove` —
+ *     reached only once regex matching finds nothing; reads one of the same
+ *     5 fixed move kinds, never decides whether the move is safe
+ *     (`guardrails.ts` still gates it, same as a typed move).
+ *   - Findings narrative (I): `lib/findings/generate.ts` — pre-existing.
+ *
+ * Deliberately absent: G1's causal stories/questions/falsifiers, I1's
+ * board-pack judgment sentence, I2's pushback — all narrative *generation*,
+ * kept as deterministic templates so a sentence can never say something the
+ * evidence block doesn't support. Every touchpoint above is a *read*: text
+ * in, a choice among a small fixed set of already-existing engine calls out.
+ * That distinction, not a headcount, is the actual rule.
+ */
+export type AiTier = "low" | "medium" | "high";
+
+function modelForTier(tier: AiTier): string {
+  const entry = (modelTiers as Record<AiTier, { anthropic: string; openai: string }>)[tier];
+  return aiProvider() === "openai" ? entry.openai : entry.anthropic;
+}
+
 /** Kept as a value for the call sites that only report which model ran. */
 export const AI_MODEL = aiModel();
 
@@ -106,6 +144,8 @@ export interface AiRequest {
   /** When set, the model must answer by calling it. */
   tool?: AiTool;
   media?: AiMedia;
+  /** Routes to a model sized for the task. Omitted keeps {@link aiModel}'s single default. */
+  tier?: AiTier;
 }
 
 export interface AiResult {
@@ -165,7 +205,7 @@ async function askAnthropic(request: AiRequest): Promise<AiResult> {
 
   const response = await anthropic.messages.create(
     {
-      model: aiModel(),
+      model: request.tier ? modelForTier(request.tier) : aiModel(),
       max_tokens: request.maxTokens,
       ...(request.system ? { system: request.system } : {}),
       ...(request.tool
@@ -227,7 +267,7 @@ async function askOpenAI(request: AiRequest): Promise<AiResult> {
 
   const response = await openai.chat.completions.create(
     {
-      model: aiModel(),
+      model: request.tier ? modelForTier(request.tier) : aiModel(),
       // Not `max_tokens`: that parameter is deprecated and rejected outright
       // by the newer models, which is a failure that looks like a bad key
       // rather than like a bad parameter.

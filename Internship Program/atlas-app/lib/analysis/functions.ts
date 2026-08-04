@@ -166,7 +166,7 @@ function hasValue(v: string): boolean {
  * another. On a single-entity chart it is the executive's directorate, which
  * is the same question asked one level down.
  */
-function divisionOf(nodes: LayoutNode[], rootId: string | null): Map<string, string> {
+export function divisionOf(nodes: LayoutNode[], rootId: string | null): Map<string, string> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const division = new Map<string, string>();
 
@@ -551,6 +551,15 @@ export function costIntensityOutliers(comparison: UnitComparison): UnitProfile[]
     .sort((a, b) => (b.costIntensity ?? 0) - (a.costIntensity ?? 0));
 }
 
+/** B2: units running deeper than this organisation's own median unit. */
+export function layerOutliers(comparison: UnitComparison): UnitProfile[] {
+  const { layers: medianLayers } = comparison.medians;
+  if (!comparison.usable || medianLayers === null) return [];
+  return comparison.comparableUnits
+    .filter((u) => u.layers > medianLayers)
+    .sort((a, b) => b.layers - a.layers);
+}
+
 /** Units leaning on agency labour harder than the rest of the organisation. */
 export function agencyConcentration(comparison: UnitComparison): UnitProfile[] {
   if (!comparison.usable) return [];
@@ -564,8 +573,9 @@ export function agencyConcentration(comparison: UnitComparison): UnitProfile[] {
 
 /** The rules above, stated in words, so a screen can show its own workings. */
 export const COMPARISON_METHOD =
-  `Every comparison is against this organisation's own median unit, never an external benchmark. ` +
+  `Almost every comparison here is against this organisation's own median unit, never an external benchmark. ` +
   `A unit needs ${MIN_UNIT_HEADCOUNT} or more positions before it is compared at all, and at least ` +
   `${MIN_COMPARABLE_UNITS} units must clear that bar before a median means anything. A unit is called out ` +
   `when it sits ${((OUTLIER_MULTIPLE - 1) * 100).toFixed(0)}% or more above that median and the gap is ` +
-  `worth at least ${MIN_EXCESS_ROLES} role.`;
+  `worth at least ${MIN_EXCESS_ROLES} role. The handful marked "External reference" or "Back-office ` +
+  `benchmarks" are the stated exceptions — a peer band, not this organisation's own figure.`;

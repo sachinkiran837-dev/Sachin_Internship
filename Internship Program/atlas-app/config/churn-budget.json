@@ -1,0 +1,4 @@
+{
+  "_note": "E3's change-fatigue budget — reporting-line churn (reassignments plus removals) as a share of headcount, read as a budget rather than a number to note and move past. Engagement-configurable per the skill spec; 10% is a placeholder default, not a claim about what this organisation can absorb.",
+  "churnBudgetShare": 0.10
+}

@@ -1,0 +1,4 @@
+{
+  "_note": "E2's tenure-cliff threshold — engagement-configurable per the skill spec, not a universal number. 10 years is a placeholder default (long enough that a departure would plausibly take undocumented knowledge with it), pending confirmation with the client.",
+  "tenureCliffYears": 10
+}

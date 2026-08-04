@@ -1,0 +1,55 @@
+Position ID,Employee Name,Position Title,Department,Site,Manager ID,Fully Loaded Cost,FTE,Status
+CEO,A Whitfield,Chief Executive Officer,Executive,Head Office,,420000,1,Filled
+CFO,B Okafor,Chief Financial Officer,Finance,Head Office,CEO,320000,1,Filled
+COS,C Delacroix,Company Secretary,Corporate Services,Head Office,CEO,180000,1,Filled
+CPO,D Marsh,Chief People Officer,People & Culture,Head Office,CEO,290000,1,Filled
+COO,E Novak,Chief Operating Officer,Operations,Head Office,CEO,300000,1,Filled
+CTO,F Ibarra,Chief Technology Officer,Information Technology,Head Office,CEO,295000,1,Filled
+FIN-N-MGR,G Petrov,Finance Manager,Finance,North Campus,CFO,110000,1,Filled
+FIN-N-1,H Suzuki,Finance Officer,Finance,North Campus,FIN-N-MGR,75000,1,Filled
+FIN-N-2,I Kowalski,Finance Officer,Finance,North Campus,FIN-N-MGR,75000,1,Filled
+FIN-N-3,J Ahmadi,Payroll Officer,Finance,North Campus,FIN-N-MGR,74000,1,Filled
+FIN-N-4,K Larsson,Accounts Payable Officer,Finance,North Campus,FIN-N-MGR,73000,1,Filled
+FIN-S-MGR,L Osei,Finance Manager,Finance,South Campus,CFO,109000,1,Filled
+FIN-S-1,M Renner,Finance Officer,Finance,South Campus,FIN-S-MGR,75000,1,Filled
+FIN-S-2,N Castillo,Finance Officer,Finance,South Campus,FIN-S-MGR,75000,1,Filled
+FIN-S-3,O Bianchi,Payroll Officer,Finance,South Campus,FIN-S-MGR,74000,1,Filled
+FIN-S-4,P Haddad,Accounts Payable Officer,Finance,South Campus,FIN-S-MGR,73000,1,Filled
+FIN-E-MGR,Q Fontaine,Finance Manager,Finance,East Campus,CFO,108000,1,Filled
+FIN-E-1,R Vukovic,Finance Officer,Finance,East Campus,FIN-E-MGR,75000,1,Filled
+FIN-E-2,S Nakamura,Payroll Officer,Finance,East Campus,FIN-E-MGR,74000,1,Filled
+FIN-E-3,T Adebayo,Accounts Payable Officer,Finance,East Campus,FIN-E-MGR,73000,1,Filled
+HR-N-MGR,U Lindqvist,HR Coordinator,People & Culture,North Campus,CPO,95000,1,Filled
+HR-N-1,V Moreno,HR Officer,People & Culture,North Campus,HR-N-MGR,68000,1,Filled
+HR-N-2,W Sato,HR Officer,People & Culture,North Campus,HR-N-MGR,68000,1,Filled
+HR-N-3,X Meyer,Recruitment Officer,People & Culture,North Campus,HR-N-MGR,67000,1,Filled
+HR-S-MGR,Y Abara,HR Coordinator,People & Culture,South Campus,CPO,94000,1,Filled
+HR-S-1,Z Costa,HR Officer,People & Culture,South Campus,HR-S-MGR,68000,1,Filled
+HR-S-2,AA Berger,Recruitment Officer,People & Culture,South Campus,HR-S-MGR,67000,1,Filled
+OPS-N-LOG1,AB Tanaka,Logistics Coordinator,Operations,North Campus,COO,72000,1,Filled
+OPS-N-LOG2,AC Dubois,Logistics Officer,Operations,North Campus,COO,58000,1,Filled
+OPS-S-LOG1,AD Hassan,Logistics Coordinator,Operations,South Campus,COO,72000,1,Filled
+OPS-S-LOG2,AE Volkov,Logistics Officer,Operations,South Campus,COO,58000,1,Filled
+OPS-E-LOG1,AF Nilsson,Logistics Coordinator,Operations,East Campus,COO,72000,1,Filled
+OPS-E-LOG2,AG Kaur,Logistics Officer,Operations,East Campus,COO,58000,1,Filled
+NUM-N,AH Fischer,Nurse Unit Manager,Operations,North Campus,COO,105000,1,Filled
+RN-N-1,AI Silva,Registered Nurse,Operations,North Campus,NUM-N,88000,1,Filled
+RN-N-2,AJ Kim,Registered Nurse,Operations,North Campus,NUM-N,88000,1,Filled
+RN-N-3,AK Weber,Registered Nurse,Operations,North Campus,NUM-N,88000,1,Filled
+RN-N-4,AL Rossi,Registered Nurse,Operations,North Campus,NUM-N,88000,1,Filled
+RN-N-5,AM Andersen,Registered Nurse,Operations,North Campus,NUM-N,88000,1,Filled
+NUM-S,AN Okonkwo,Nurse Unit Manager,Operations,South Campus,COO,105000,1,Filled
+RN-S-1,AO Petrova,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+RN-S-2,AP Nguyen,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+RN-S-3,AQ Diallo,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+RN-S-4,AR Novotny,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+RN-S-5,AS Larkin,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+RN-S-6,AT Bergstrom,Registered Nurse,Operations,South Campus,NUM-S,88000,1,Filled
+NUM-E,AU Correia,Nurse Unit Manager,Operations,East Campus,COO,104000,1,Filled
+RN-E-1,AV Duarte,Registered Nurse,Operations,East Campus,NUM-E,87000,1,Filled
+RN-E-2,AW Haugen,Registered Nurse,Operations,East Campus,NUM-E,87000,1,Filled
+RN-E-3,AX Ferreira,Registered Nurse,Operations,East Campus,NUM-E,87000,1,Filled
+RN-E-4,AY Solberg,Registered Nurse,Operations,East Campus,NUM-E,87000,1,Filled
+IT-MGR,AZ Herrera,IT Manager,Information Technology,Head Office,CTO,115000,1,Filled
+IT-1,BA Kristiansen,Systems Engineer,Information Technology,Head Office,IT-MGR,95000,1,Filled
+IT-2,BB Okonjo,Systems Engineer,Information Technology,Head Office,IT-MGR,95000,1,Filled

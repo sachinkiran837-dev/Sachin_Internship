@@ -1,0 +1,6 @@
+{
+  "_note": "D3's part-time-fragmentation threshold — engagement-configurable per the skill spec, since what counts as a 'small' fraction depends on the roster pattern (a 0.2 FTE fraction is unremarkable in a casual-bank-heavy roster and notable in a salaried head office). 0.4 is a placeholder default, not a claim about this organisation.",
+  "smallFractionThreshold": 0.4,
+  "minUnitHeadcountForSeniorShare": 4,
+  "minUnitHeadcountNote": "A 2-person department where 1 is senior-graded is a 50% senior share that says nothing — too small a base to read as drift or as anything else."
+}

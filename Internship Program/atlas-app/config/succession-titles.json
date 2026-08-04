@@ -1,0 +1,15 @@
+{
+  "_note": "B3: the 'legitimate exception' half of the single-report-manager finding. A single-report role matching one of these is a deputy/succession structure or a transitional arrangement, not a relay layer, and is excluded from delayering candidates with a caveat rather than silently counted alongside them.",
+  "matchTitles": [
+    "deputy",
+    "assistant",
+    "associate",
+    "acting",
+    "interim",
+    "2ic",
+    "second in charge",
+    "second-in-charge",
+    "successor",
+    "designate"
+  ]
+}

@@ -5,6 +5,7 @@ import { pseudonymize } from "./anonymize";
 import { classifyRoles, roleKey, type RoleClassification } from "./classify";
 import { note, type IngestNote } from "./notes";
 import { groupPositions, groupingNote, resolveGroup, titleFallbackNote } from "./functionGroups";
+import { parseLooseDate } from "./parseDate";
 import {
   UNCLASSIFIED,
   type ColumnMapping,
@@ -105,6 +106,14 @@ interface RawRow {
   rawName: string;
   title: string;
   department: string;
+  /** C1: the physical site/location, when a file carries one. Null otherwise. */
+  site: string | null;
+  /** D3/E3: classification/grade, when a file carries one. Null otherwise. */
+  grade: string | null;
+  /** D3/E2: parsed start date, when a file carries one and it reads as a date. Null otherwise. */
+  startDate: string | null;
+  /** D2: parsed vacancy date, when a file carries one and it reads as a date. Null otherwise. */
+  vacantSince: string | null;
   managerNameRaw: string;
   cost: number;
   fte: number;
@@ -134,6 +143,10 @@ function syntheticNode(
     title: label,
     department,
     functionGroup: department,
+    site: null,
+    grade: null,
+    startDate: null,
+    vacantSince: null,
     managerId,
     cost: 0,
     fte: 0,
@@ -161,6 +174,10 @@ export async function buildOrgGraph(
   const costCol = sourceColumnFor(columnMapping, "cost");
   const fteCol = sourceColumnFor(columnMapping, "fte");
   const statusCol = sourceColumnFor(columnMapping, "status");
+  const siteCol = sourceColumnFor(columnMapping, "site");
+  const gradeCol = sourceColumnFor(columnMapping, "grade");
+  const startDateCol = sourceColumnFor(columnMapping, "startDate");
+  const vacantSinceCol = sourceColumnFor(columnMapping, "vacantSince");
 
   for (const [field, col] of Object.entries({
     name: nameCol,
@@ -207,6 +224,10 @@ export async function buildOrgGraph(
       rawName: (nameCol ? row[nameCol] : "").trim() || `Unnamed row ${index + 2}`,
       title: (titleCol ? row[titleCol] : "").trim() || "Unspecified title",
       department: (deptCol ? row[deptCol] : "").trim() || UNCLASSIFIED,
+      site: siteCol ? (row[siteCol] ?? "").trim() || null : null,
+      grade: gradeCol ? (row[gradeCol] ?? "").trim() || null : null,
+      startDate: startDateCol ? parseLooseDate(row[startDateCol] ?? "") : null,
+      vacantSince: vacantSinceCol ? parseLooseDate(row[vacantSinceCol] ?? "") : null,
       managerNameRaw: (managerCol ? row[managerCol] : "").trim(),
       cost: costCol ? parseCost(row[costCol]) : 0,
       fte,
@@ -478,6 +499,10 @@ export async function buildOrgGraph(
       title: r.row.title,
       department: r.row.department,
       functionGroup: resolveGroup(grouping, r.row.department, r.row.title),
+      site: r.row.site,
+      grade: r.row.grade,
+      startDate: r.row.startDate,
+      vacantSince: r.row.status === "vacant" ? r.row.vacantSince : null,
       managerId: r.managerId,
       cost: r.row.cost,
       fte: r.row.fte,

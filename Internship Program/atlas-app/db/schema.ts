@@ -111,6 +111,20 @@ export const positions = pgTable("positions", {
    * "Finance" is not a consolidation anyone asked for.
    */
   functionGroup: text("function_group"),
+  /**
+   * The physical site, location or facility a position sits at — distinct
+   * from department/function. Null wherever no file supplied a site column;
+   * C1's function footprint and C2's duplication detection are the only
+   * things that read it, and both degrade to a single-instance read when
+   * it's absent rather than guessing a site from the department name.
+   */
+  site: text("site"),
+  /** Classification/grade/pay-band (D3/E3) — a distinct concept from classificationSource below. */
+  grade: text("grade"),
+  /** ISO-ish date string this incumbent started (D3/E2 tenure). */
+  startDate: text("start_date"),
+  /** ISO-ish date string this position became vacant (D2 vacancy aging). */
+  vacantSince: text("vacant_since"),
   managerId: text("manager_id"),
   cost: real("cost").notNull(),
   fte: real("fte").notNull().default(1),

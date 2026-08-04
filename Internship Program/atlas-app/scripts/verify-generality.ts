@@ -221,6 +221,10 @@ function runOrg(label: string, buffer: Buffer) {
     title: r.title,
     department: r.department || "Unclassified",
     functionGroup: r.department || "Unclassified",
+    site: null,
+    grade: null,
+    startDate: null,
+    vacantSince: null,
     managerId: r.managerName || null,
     cost: Number(r.cost) || 0,
     fte: Number(r.fte) || 1,
@@ -309,6 +313,10 @@ function main() {
     // Fixtures group as they are stated, so this still tests the engine and
     // not the rollup — the rollup has its own suite.
     functionGroup: n.department,
+    site: null,
+    grade: null,
+    startDate: null,
+    vacantSince: null,
     orgId: "sw",
     rawName: n.title,
     displayName: n.title,

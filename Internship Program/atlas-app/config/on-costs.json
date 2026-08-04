@@ -1,0 +1,8 @@
+{
+  "_note": "A3: on-cost loading, so a client can see the fully-loaded rate behind every headline figure rather than take Atlas's word for it. These are Australian-context defaults (superannuation guarantee, leave loading, payroll tax, workers compensation) and are meant to be edited per engagement, not trusted as a universal rate.",
+  "_basis": "Applied on top of whatever the ingested cost column holds. Atlas assumes that figure is base salary/wages unless the upload context states it is already fully loaded — in which case set every rate here to 0 rather than double-loading a number that already carries them.",
+  "superannuationRate": 0.115,
+  "leaveLoadingRate": 0.0175,
+  "payrollTaxRate": 0.0485,
+  "workersCompRate": 0.015
+}

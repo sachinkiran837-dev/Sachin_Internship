@@ -41,7 +41,6 @@ export function UploadForm() {
   const [selected, setSelected] = useState<File[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [context, setContext] = useState("");
-  const [hypothesis, setHypothesis] = useState("");
   const [dragging, setDragging] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -97,7 +96,6 @@ export function UploadForm() {
       data.set("useSample", "off");
       data.set("anonymize", anonymize ? "on" : "off");
       data.set("context", context);
-      data.set("hypothesis", hypothesis);
       for (const id of ids) data.append("uploadId", id);
 
       startSubmit(() => formAction(data));
@@ -140,52 +138,12 @@ export function UploadForm() {
           server action in the "on"/"off" shape it already reads. */}
       <input type="hidden" name="useSample" value={useSample ? "on" : "off"} />
 
-      {/* Asked before the files, not after them.
-
-          The order is the argument. Handed a spreadsheet first, a person
-          describes their spreadsheet — which columns are which, which rows to
-          drop — and never gets to what the business is for, because by then
-          the task in front of them looks like a data problem. Asked before
-          any of that, they describe the organisation: what it earns, what
-          they are trying to reach, what they already think is wrong. That is
-          the material Atlas cannot get from any export, and the only moment
-          it is natural to ask for it.
-
-          It changes nothing about how the files are read. What it changes is
-          what Atlas is allowed to say about them once they are. */}
-      <section className="flex flex-col gap-1.5 rounded-lg border border-primary/30 bg-accent/30 p-4">
-        <p className="eyebrow">
-          <span className="eyebrow-dot" aria-hidden />
-          Step 1 — Hypothesis layer
-        </p>
-        <Label htmlFor="hypothesis" className="text-sm font-medium">
-          Before the data: what&rsquo;s going on in the business?
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          What it does and what it earns, what you&rsquo;re trying to reach, and what you already
-          suspect is wrong. Atlas tests each suspicion against the establishment and tells you
-          plainly when the data doesn&rsquo;t support it. Revenue is the one thing no payroll export
-          contains and the one that turns &ldquo;this function looks expensive&rdquo; into revenue
-          per head — a line each is enough. Everything you write is quoted back next to the figures
-          it produced, and nothing here changes how your files are read.
-        </p>
-        <textarea
-          id="hypothesis"
-          name="hypothesis"
-          rows={4}
-          value={hypothesis}
-          onChange={(e) => setHypothesis(e.target.value)}
-          placeholder="Optional, and you can change it later. e.g. Field services across four trading names. Northbrook did about 40m last year, Calder 26m. We need 3m out of the cost base by FY27 without touching frontline delivery. We think head office has grown faster than the business and that Operations is over-managed."
-          className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        />
-      </section>
-
       <fieldset className="flex flex-col gap-3">
         <legend className="sr-only">Data source</legend>
 
         <p className="eyebrow">
           <span className="eyebrow-dot" aria-hidden />
-          Step 2 — Your data
+          Your data
         </p>
 
         <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors has-checked:border-primary has-checked:bg-accent/50">

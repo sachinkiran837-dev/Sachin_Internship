@@ -74,16 +74,29 @@ export async function answerIngestAction(
       getBusinessContext(orgId),
     ]);
 
+    // Re-read from the client's own words, not carried forward as an
+    // already-parsed object — a correction can merge two brands into one,
+    // and a revenue figure attached to a unit that no longer exists would
+    // silently drop out of every ratio on the findings screen. The
+    // correction box's text is folded in here too, exactly as it already is
+    // above for the column-binding instructions: this is the one free-text
+    // field on the confirm screen, and a client explaining "Northbrook did
+    // about forty million last year" in the same box that fixes a mis-read
+    // column shouldn't have that sentence go nowhere because it landed in
+    // the wrong-shaped field. `readBusinessContext` only ever extracts what
+    // was actually said, so text meant for the file reading rather than the
+    // business simply contributes nothing here — never a wrong guess.
+    const hypothesisText = [business.raw, answers.extraContext]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join("\n\n");
+
     const result = await runIngest({
       orgId,
       incoming: blobs,
       failures: [],
       context,
-      // Read again from the client's original words rather than carried
-      // forward. A correction can merge two brands into one, and a revenue
-      // figure attached to a unit that no longer exists would silently drop
-      // out of every ratio on the findings screen.
-      hypothesis: business.raw,
+      hypothesis: hypothesisText,
       anonymize: org.anonymized,
       answers: { ...answers, extraContext: "" },
       prior: {

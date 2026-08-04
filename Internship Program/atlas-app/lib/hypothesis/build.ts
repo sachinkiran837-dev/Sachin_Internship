@@ -5,6 +5,7 @@ import {
   agencyConcentration,
   analyseFunctions,
   costIntensityOutliers,
+  layerOutliers,
   managementOutliers,
   productivitySpread,
   type FunctionAnalysis,
@@ -13,7 +14,17 @@ import {
 } from "@/lib/analysis/functions";
 import { analyseAllPlays, type PlayAnalysis, type PlayMeta } from "@/lib/scenario/plays";
 import { computeMetrics } from "@/lib/metrics/diagnostics";
-import type { DiagnosticMetrics, Position } from "@/lib/graph/types";
+import { buildFootprint, type FunctionFootprint } from "@/lib/analysis/footprint";
+import { findDuplicatedFunctions, type DuplicationCandidate } from "@/lib/analysis/duplication";
+import { benchmarkFunctions, isPublicHealthSector, type BackOfficeReading } from "@/lib/analysis/backOfficeBenchmarks";
+import { computeProductivity } from "@/lib/analysis/productivity";
+import { buildVacancyHygiene, type VacancyHygieneResult } from "@/lib/analysis/vacancyHygiene";
+import { buildContingentReliance, type ContingentRelianceResult } from "@/lib/analysis/contingentReliance";
+import { buildWorkforceMix, type WorkforceMixResult } from "@/lib/analysis/workforceMix";
+import { buildKeyPersonRisk, type KeyPersonRiskResult } from "@/lib/analysis/keyPersonRisk";
+import { buildPeerBenchmark, type PeerBenchmarkResult } from "@/lib/analysis/peerBenchmark";
+import { enrich, type Archetype } from "@/lib/hypothesis/archetypes";
+import type { DiagnosticMetrics, IngestIssue, Position, ProtectedRoleRule } from "@/lib/graph/types";
 import { totalRevenue, type Belief, type BusinessContext } from "./context";
 
 /**
@@ -95,6 +106,20 @@ export interface Hypothesis {
   verdict: "supported" | "not supported" | "untestable" | null;
   /** Used to rank. Roughly "how much is on the table", not a confidence score. */
   weight: number;
+  /**
+   * G1 fields. Left optional here rather than required on every generator's
+   * own return type, on purpose — no individual generator sets these.
+   * `enrich()` (lib/hypothesis/archetypes.ts) fills them in a single pass
+   * over the assembled array in `buildHypotheses`, so every hypothesis
+   * — present and future — gets archetype tagging, a confidence grade, three
+   * questions, a falsifier and a data ask without touching its generator.
+   * By the time a `Hypothesis` leaves this module, all five are always set.
+   */
+  archetypes?: Archetype[];
+  confidenceGrade?: "high" | "medium" | "low";
+  provokingQuestions?: string[];
+  falsifier?: string;
+  dataAsk?: string;
 }
 
 export interface HypothesisResult {
@@ -136,12 +161,24 @@ function below(value: number, median: number): boolean {
 export function buildHypotheses(
   positions: Position[],
   rootId: string | null,
-  business: BusinessContext
+  business: BusinessContext,
+  issues: Pick<IngestIssue, "kind">[] = []
 ): HypothesisResult {
-  const metrics = computeMetrics(positions, rootId);
+  const metrics = computeMetrics(positions, rootId, issues);
   const analysis = analyseFunctions(positions, rootId, business);
   const plays = analyseAllPlays(positions, rootId);
   const comparison = analysis.primary;
+  const footprint = buildFootprint(positions, rootId);
+  const duplicates = findDuplicatedFunctions(footprint);
+  const backOffice = benchmarkFunctions(comparison, business, metrics.totalFte);
+  const productivityRatios = computeProductivity(metrics, business);
+
+  const agencyShareByUnit = new Map(comparison.units.map((u) => [u.key, u.agencyShare] as const));
+  const vacancy = buildVacancyHygiene(positions, rootId, agencyShareByUnit);
+  const reliance = buildContingentReliance(positions, rootId, comparison, vacancy);
+  const workforceMix = buildWorkforceMix(positions, rootId);
+  const keyPersonRisk = buildKeyPersonRisk(positions, rootId);
+  const peerBenchmark = buildPeerBenchmark(positions, rootId, metrics, metrics.shape.managerCost, business, comparison, reliance);
 
   const findPlay = (id: string) => plays.find((p) => p.play.id === id) ?? null;
 
@@ -151,9 +188,21 @@ export function buildHypotheses(
     ...costConcentration(comparison),
     ...agencyReliance(comparison, metrics, findPlay),
     ...structureShape(comparison, metrics, business, findPlay),
+    ...excessDepth(comparison, metrics, findPlay),
+    ...shapeRead(metrics),
+    ...centralizationFootprint(footprint),
+    ...duplicatedFunctions(duplicates),
+    ...backOfficeVerdicts(backOffice),
+    ...productivityRead(productivityRatios, metrics),
+    ...contingentRelianceRead(reliance),
+    ...vacancyHygieneRead(vacancy),
+    ...workforceMixRead(workforceMix),
+    ...keyPersonRiskRead(keyPersonRisk),
+    ...controlGapRead(metrics),
+    ...peerBenchmarkRead(peerBenchmark),
     ...beliefTests(business, comparison, metrics),
     ...targetGap(business, plays),
-  ];
+  ].map((h) => ({ ...h, ...enrich(h) }));
 
   return {
     hypotheses: hypotheses.sort(rank),
@@ -534,7 +583,7 @@ function agencyReliance(
   return [
     {
       id: "workforce-mix:agency",
-      lens: "Workforce mix",
+      lens: "Workforce composition",
       unit: concentrated[0]?.key ?? null,
       title: `${metrics.contingentCount} of ${metrics.headcount} positions are agency, and they carry no contracted FTE`,
       thinking:
@@ -676,7 +725,7 @@ function structureShape(
   if (metrics.vacantCount > 0 && vacancy && vacancy.analysis.candidates.length > 0) {
     out.push({
       id: "structure:vacancies",
-      lens: "Workforce mix",
+      lens: "Workforce composition",
       unit: null,
       title: `${metrics.vacantCount} budgeted position${metrics.vacantCount === 1 ? " is" : "s are"} vacant`,
       thinking:
@@ -714,6 +763,628 @@ function structureShape(
   }
 
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* B2. excess depth — a directorate running deeper than its own group     */
+/* ------------------------------------------------------------------ */
+
+function excessDepth(comparison: UnitComparison, metrics: DiagnosticMetrics, findPlay: FindPlay): Hypothesis[] {
+  const outliers = layerOutliers(comparison);
+  if (outliers.length === 0) return [];
+
+  const unit = outliers[0];
+  const noun = comparison.label.toLowerCase();
+  const median = comparison.medians.layers ?? unit.layers;
+  const gap = unit.layers - median;
+  const band = metrics.layerBand;
+
+  const deepChain = findPlay("deep-chain-compression");
+  const passThrough = findPlay("pass-through-layers");
+  const play = [deepChain, passThrough]
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .sort((a, b) => b.analysis.candidates.length - a.analysis.candidates.length)[0];
+
+  return [
+    {
+      id: `excess-depth:${unit.key}`,
+      lens: "Layers and delayering",
+      unit: unit.key,
+      title: `${unit.key} runs ${unit.layers} layers against a group median of ${median.toFixed(0)}`,
+      thinking:
+        `${unit.key} is ${gap} layer${gap === 1 ? "" : "s"} deeper than the median ${noun} in this organisation` +
+        (band.verdict === "over-band"
+          ? `, and the whole organisation already sits above the stated peer band of ${band.healthyMin}–${band.healthyMax} layers.`
+          : `, even though the organisation as a whole sits inside the stated peer band of ${band.healthyMin}–${band.healthyMax} layers — so this is a local pattern, not a group-wide one.`) +
+        ` Depth is a hidden tax on decision speed rather than a cost line, which is why it survives reviews that only look at headcount.`,
+      signals: [
+        {
+          label: `${unit.key} layers`,
+          value: String(unit.layers),
+          comparison: `median ${noun} ${median.toFixed(0)}`,
+        },
+        {
+          label: "Organisation-wide layers",
+          value: String(metrics.layers),
+          comparison: `peer band ${band.healthyMin}–${band.healthyMax}`,
+        },
+      ],
+      action: play
+        ? `${play.play.name} lists the specific roles on ${unit.key}'s longest reporting chains.`
+        : `Walk ${unit.key}'s longest reporting chain from the frontline to its top and find the step that adds no decision.`,
+      playId: play?.play.id ?? null,
+      playName: play?.play.name ?? null,
+      prize: {
+        amount: play && play.analysis.projectedSaving > 0 ? play.analysis.projectedSaving : null,
+        nature: "cost-out",
+        statement:
+          play && play.analysis.projectedSaving > 0
+            ? `${currency(play.analysis.projectedSaving)} a year across ${play.analysis.candidates.length} role${play.analysis.candidates.length === 1 ? "" : "s"} on the deepest chains. ${play.analysis.method}`
+            : `Fewer steps in every approval that crosses ${unit.key}'s deepest chain. Atlas has not priced this from the data.`,
+      },
+      conditions: [
+        comparison.choice,
+        `That ${unit.key}'s work is not genuinely more layered by nature — a regulated approval chain, for instance. If it is, the depth is the cost of that control, not a saving.`,
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: play?.analysis.projectedSaving ?? gap * 10000,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* B4. organisational shape — the silhouette headcount reads as           */
+/* ------------------------------------------------------------------ */
+
+function shapeRead(metrics: DiagnosticMetrics): Hypothesis[] {
+  const { shape, managerCostShare, byLayer } = metrics.shape;
+  if (shape === "indeterminate" || shape === "pyramid") return [];
+
+  return [
+    {
+      id: "shape:read",
+      lens: "Organisational shape",
+      unit: null,
+      title:
+        shape === "diamond"
+          ? "Headcount and management pool in the middle of the structure — a diamond, not a pyramid"
+          : "The middle of the structure is thin relative to the top and bottom — an hourglass shape",
+      thinking:
+        (shape === "diamond"
+          ? "Reading headcount by layer rather than as one group-wide ratio, both people and management pool in the middle layers. That usually means delivery has been pushed down while coordination has pooled in the middle — seniority drift rather than a single bloated function."
+          : "Reading headcount by layer rather than as one group-wide ratio, the middle layers are thin relative to the top and bottom. That usually means a missing layer of working supervision: work is either escalated to senior roles or absorbed by the frontline with nothing in between.") +
+        ` Management cost is ${(managerCostShare * 100).toFixed(0)}% of total cost across the structure.`,
+      signals: byLayer.map((l) => ({
+        label: `Layer ${l.depth + 1}`,
+        value: `${l.headcount} position${l.headcount === 1 ? "" : "s"}`,
+        comparison: `${(l.managerShare * 100).toFixed(0)}% management`,
+      })),
+      action:
+        shape === "diamond"
+          ? "Look at the middle layers first: the management-load and single-report findings on this screen name the specific roles."
+          : "Check whether the missing middle is a deliberate flat delivery model or a gap that is forcing escalation upward — the spans-and-layers findings on this screen are the next test.",
+      playId: null,
+      playName: null,
+      prize: {
+        amount: null,
+        nature: "confidence",
+        statement: "A structural read that reframes where to look, rather than a number on its own.",
+      },
+      conditions: [
+        `Computed over ${byLayer.reduce((s, l) => s + l.headcount, 0)} real (non-heading) positions across ${byLayer.length} layers.`,
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: 0,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* C1. centralization — where a function's footprint sits today          */
+/* ------------------------------------------------------------------ */
+
+function centralizationFootprint(footprint: { functions: FunctionFootprint[] }): Hypothesis[] {
+  const candidates = footprint.functions
+    .filter((f) => f.hasSiteData && f.bySite.length >= 2 && f.recommendedPattern !== null)
+    .sort((a, b) => b.cost - a.cost)
+    .slice(0, 2);
+
+  return candidates.map((f) => ({
+    id: `centralization:${f.functionGroup}`,
+    lens: "Centralization",
+    unit: f.functionGroup,
+    title: `${f.functionGroup} runs as ${f.bySite.length} separate site instances today`,
+    thinking:
+      `${f.functionGroup} is classified as ${f.archetype} work: ${f.archetypeRationale} ${f.tradeOff.forCentralizing} ` +
+      `Against that: ${f.tradeOff.forLocal}`,
+
+    signals: f.bySite.slice(0, 6).map((i) => ({
+      label: i.key,
+      value: `${i.headcount} position${i.headcount === 1 ? "" : "s"}`,
+      comparison: currency(i.cost),
+    })),
+    action: f.patternRationale,
+    playId: f.recommendedPattern === "shared service plus business partner" ? "shared-service" : null,
+    playName: f.recommendedPattern === "shared service plus business partner" ? "Consolidate scattered functions" : null,
+    prize: {
+      amount: null,
+      nature: "confidence",
+      statement: `A recommended operating-model pattern — ${f.recommendedPattern} — not a priced saving. The duplication finding on this screen, where one exists, has the number.`,
+    },
+    conditions: [
+      `Archetype is assigned at the function-group level (${f.functionGroup}), not per site — a site that reads differently from the rest of the function isn't captured here.`,
+      `Clinical positions are excluded from this footprint entirely, whatever site they sit at.`,
+    ],
+    strength: "observed",
+    verdict: null,
+    weight: f.cost,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* C2. duplication — the same function built more than once              */
+/* ------------------------------------------------------------------ */
+
+function duplicatedFunctions(candidates: DuplicationCandidate[]): Hypothesis[] {
+  return candidates.slice(0, 2).map((d) => ({
+    id: `duplication:${d.functionGroup}`,
+    lens: "Duplication",
+    unit: d.functionGroup,
+    title: `${d.functionGroup} is staffed separately across ${d.instances.length} sites — ${currency(d.captureLow)}-${currency(d.captureHigh)} in it if confirmed`,
+    thinking:
+      `${d.instances.length} sites each run a ${d.functionGroup.toLowerCase()} function large enough to be a real ` +
+      `build-out — ${d.combinedHeadcount} positions and ${currency(d.combinedCost)} combined. The first question is whether this is ` +
+      `the same function run in parallel by accident, or a naming artefact — two teams that look alike on a chart but ` +
+      `do different work. Atlas cannot settle that from the structure alone; the breakdown below is the evidence to check it against.`,
+    signals: d.instances.map((i) => ({
+      label: i.key,
+      value: `${i.headcount} position${i.headcount === 1 ? "" : "s"}`,
+      comparison: currency(i.cost),
+    })),
+    action:
+      `Confirm these sites are genuinely running the same process before pricing anything further. Once confirmed, the ` +
+      `consolidation play is a shared-service build — pick the site with the most capacity or the best system fit as the owner.`,
+    playId: null,
+    playName: null,
+    prize: {
+      amount: d.captureLow,
+      nature: "cost-out",
+      statement: `${currency(d.captureLow)}-${currency(d.captureHigh)} a year — a 20-35% capture band on the combined ` +
+        `${currency(d.combinedCost)}, protected roles excluded, pending confirmation this is real duplication and not a ` +
+        `naming artefact. Never the whole duplicated cost: some of it is genuine local variation.`,
+    },
+    conditions: [
+      `Real duplication versus a naming artefact hasn't been confirmed — that call needs someone who knows what each site's team actually does.`,
+      d.protectedExcludedCount > 0
+        ? `${d.protectedExcludedCount} protected role${d.protectedExcludedCount === 1 ? "" : "s"} across these sites excluded before pricing.`
+        : `No protected roles fell inside these instances.`,
+    ],
+    strength: "observed",
+    verdict: null,
+    weight: d.captureLow,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* C3. back-office benchmarks — read against a sector band, not the org   */
+/* ------------------------------------------------------------------ */
+
+function backOfficeVerdicts(readings: BackOfficeReading[]): Hypothesis[] {
+  return readings
+    .filter((r) => r.verdict === "over" || r.verdict === "under")
+    .slice(0, 2)
+    .map((r) => ({
+      id: `back-office:${r.functionGroup}`,
+      lens: "Back-office benchmarks",
+      unit: r.functionGroup,
+      title: `${r.functionGroup} is ${r.verdict === "over" ? "oversized" : "undersized"} against its sector reference band`,
+      thinking:
+        `Unlike every other comparison on this screen, this one is against an external, sector-adjusted band rather ` +
+        `than this organisation's own median: ${r.bandStatement}. ${r.functionGroup} runs ${
+          r.bandKind === "fte-per-100" ? `${r.fteFor100.toFixed(2)} FTE per 100` : `${pct(r.costShare)} of revenue`
+        }.` + (r.outsourcingCaveat ? ` ${r.outsourcingCaveat}` : ""),
+      signals: [
+        { label: "FTE per 100 organisational FTE", value: r.fteFor100.toFixed(2) },
+        { label: "Share of total cost", value: pct(r.costShare) },
+        ...(r.outsourcingCaveat ? [{ label: "Outsourcing caveat", value: "flagged" }] : []),
+      ],
+      action:
+        r.verdict === "over"
+          ? `Check whether ${r.functionGroup}'s size reflects genuine complexity this sector band doesn't capture before treating the gap as a saving.`
+          : r.outsourcingCaveat
+            ? `Establish what's been pushed outside the establishment count before concluding ${r.functionGroup} is under-invested.`
+            : `Check this against a control gap before reading it as healthy — a lean function can still be missing a mandated role.`,
+      playId: null,
+      playName: null,
+      prize: {
+        amount: null,
+        nature: "confidence",
+        statement: `A sector-band read, not a priced finding — it says where to look, not what to cut or add.`,
+      },
+      conditions: [
+        `This band is an external constant (${r.bandLabel ?? r.functionGroup}), not this organisation's own median — the one place on this screen that's true.`,
+        r.outsourcingCaveat ?? "No outsourcing or recharge signal was detected for this function.",
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: Math.abs(r.costShare) * 1000,
+    }));
+}
+
+/* ------------------------------------------------------------------ */
+/* C4. productivity — revenue per FTE, held to the decomposition rule    */
+/* ------------------------------------------------------------------ */
+
+function productivityRead(
+  reading: ReturnType<typeof computeProductivity>,
+  metrics: DiagnosticMetrics
+): Hypothesis[] {
+  if (reading.instantiation !== "commercial" || reading.revenuePerFte === null) return [];
+
+  return [
+    {
+      id: "productivity:org-wide",
+      lens: "Productivity",
+      unit: null,
+      title: `Revenue per FTE runs ${currency(reading.revenuePerFte)} organisation-wide`,
+      thinking:
+        `${reading.method} This figure is a baseline, not a verdict on whether productivity is improving or ` +
+        `worsening — that needs a prior comparable period, which a single establishment snapshot cannot supply.`,
+      signals: [
+        { label: "Revenue per FTE", value: currency(reading.revenuePerFte) },
+        { label: "Contracted FTE", value: metrics.totalFte.toFixed(0) },
+      ],
+      action:
+        "Supply a prior period's revenue and headcount and Atlas can decompose the next reading into a price effect and a productivity effect, rather than reporting the raw ratio on its own.",
+      playId: null,
+      playName: null,
+      prize: {
+        amount: null,
+        nature: "confidence",
+        statement: "A baseline to compare the next reading against, not a saving.",
+      },
+      conditions: [reading.safeStaffingNote],
+      strength: "tested",
+      verdict: null,
+      weight: 0,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* D1. contingent reliance — structural agency dependence, peer-banded    */
+/* ------------------------------------------------------------------ */
+
+function contingentRelianceRead(reliance: ContingentRelianceResult): Hypothesis[] {
+  const structural = reliance.byShare.filter((u) => u.verdict === "structural").slice(0, 2);
+  if (structural.length === 0) return [];
+
+  return structural.map((u) => ({
+    id: `contingent-reliance:${u.functionGroup}`,
+    lens: "Workforce composition",
+    unit: u.functionGroup,
+    title: `${u.functionGroup} runs ${pct(u.agencyShare)} agency/contingent — above the structural-reliance line`,
+    thinking:
+      `${u.functionGroup} carries ${u.agencyCount} of its ${u.headcount} positions as agency or contingent labour — ` +
+      `above the 15% line this reads against, a stated peer band rather than this organisation's own median (5-8% is normal flexibility). ` +
+      (u.vacancyRate !== null
+        ? `Its vacancy rate runs ${pct(u.vacancyRate)}, which is worth reading alongside this: a unit that is both ` +
+          `high-vacancy and high-agency usually means the same roster gaps are being papered over at a premium, ` +
+          `not that the unit has chosen contingent labour deliberately.`
+        : `No vacancy data reached this overlay, so whether this is a papered-over roster gap or a deliberate ` +
+          `flexible-workforce design can't be told apart from the numbers alone.`),
+    signals: [
+      { label: "Agency/contingent share", value: pct(u.agencyShare), comparison: "peer band 5-8% normal, >15% structural" },
+      { label: "Positions", value: `${u.agencyCount} of ${u.headcount}` },
+      { label: "Estimated premium", value: u.premium > 0 ? currency(u.premium) : "not priced" },
+      ...(u.vacancyRate !== null ? [{ label: "Vacancy rate, same unit", value: pct(u.vacancyRate) }] : []),
+    ],
+    action:
+      `Get the roster, shift-fill and invoice data behind this before committing to a conversion number — the premium ` +
+      `here is a ceiling, not a promise. Continuity-of-care risk sits alongside the cost question; this is a clinical- ` +
+      `governance conversation as much as a finance one where the unit is clinical.`,
+    playId: "agency-premium",
+    playName: "Convert agency premium to permanent",
+    prize: {
+      amount: u.premium > 0 ? u.premium : null,
+      nature: "cost-rebase",
+      statement:
+        u.premium > 0
+          ? `${currency(u.premium)} a year is the estimated premium in ${u.functionGroup}, priced against this org's own ` +
+            `permanent equivalents where one exists. Indicative until roster and invoice data confirm it — never assert ` +
+            `the whole premium as recoverable.`
+          : `No priced premium in ${u.functionGroup} yet — none of its contingent roles carry a cost, or none price above their permanent equivalent.`,
+    },
+    conditions: [
+      "The recoverable share of this premium is a conversion-feasibility judgment, not something this engine asserts on its own.",
+      "Genuinely seasonal surge cover misread as structural reliance because the snapshot lands mid-surge would carry this same caveat forward.",
+    ],
+    strength: "observed",
+    verdict: null,
+    weight: u.premium > 0 ? u.premium : u.agencyShare * 100000,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* D2. vacancy hygiene — what the vacancies are actually saying           */
+/* ------------------------------------------------------------------ */
+
+function vacancyHygieneRead(vacancy: VacancyHygieneResult): Hypothesis[] {
+  if (vacancy.longVacant.length === 0) return [];
+
+  const byReading = new Map<string, { count: number; cost: number }>();
+  for (const v of vacancy.longVacant) {
+    const entry = byReading.get(v.reading) ?? { count: 0, cost: 0 };
+    entry.count += 1;
+    entry.cost += v.cost;
+    byReading.set(v.reading, entry);
+  }
+
+  const latentSaving = byReading.get("latent-saving");
+  const controlGap = byReading.get("control-gap");
+  const agencyPapered = byReading.get("agency-papered-gap");
+  const totalCost = vacancy.longVacant.reduce((s, v) => s + v.cost, 0);
+
+  return [
+    {
+      id: "vacancy-hygiene:long-vacant",
+      lens: "Workforce composition",
+      unit: null,
+      title: `${vacancy.longVacant.length} position${vacancy.longVacant.length === 1 ? " has" : "s have"} been vacant long enough to be worth a first look`,
+      thinking:
+        `${currency(vacancy.fundedVacantCost)} a year sits in vacant-but-funded roles across this establishment. ` +
+        `Of the ${vacancy.longVacant.length} open long enough to flag, ${latentSaving?.count ?? 0} read as a role the ` +
+        `organisation has already proven it can operate without, ${agencyPapered?.count ?? 0} look like a roster gap ` +
+        `being papered over by agency at a premium, and ${controlGap?.count ?? 0} are protected or mandated roles — a ` +
+        `control gap, not a quick-win removal candidate. Each reading is a proposal pending confirmation, not a verdict.` +
+        (vacancy.ageUnknownCount > 0
+          ? ` A further ${vacancy.ageUnknownCount} vacant position${vacancy.ageUnknownCount === 1 ? "" : "s"} carries no vacancy date, so its age isn't computable.`
+          : ""),
+      signals: [
+        { label: "Vacancy rate", value: pct(vacancy.vacancyRate) },
+        { label: "Funded-but-vacant cost", value: currency(vacancy.fundedVacantCost) },
+        { label: "Long-vacant positions", value: String(vacancy.longVacant.length) },
+        ...(latentSaving ? [{ label: "Read as latent saving", value: `${latentSaving.count} (${currency(latentSaving.cost)})` }] : []),
+        ...(agencyPapered ? [{ label: "Read as agency-papered gap", value: `${agencyPapered.count} (${currency(agencyPapered.cost)})` }] : []),
+        ...(controlGap ? [{ label: "Control gap — not a removal candidate", value: String(controlGap.count) }] : []),
+      ],
+      action:
+        `Start with the roles reading "latent saving" — the organisation has already run without them, which makes ` +
+        `closure the lowest-risk quick win in phasing. Cross-check each one against acting-arrangement coverage first: ` +
+        `a vacancy quietly covered by an acting appointment isn't a clean gap.`,
+      playId: "vacancy-rationalisation",
+      playName: "Close vacancies the org is running without",
+      prize: {
+        amount: latentSaving && latentSaving.cost > 0 ? latentSaving.cost : null,
+        nature: "cost-out",
+        statement:
+          latentSaving && latentSaving.cost > 0
+            ? `${currency(latentSaving.cost)} a year across ${latentSaving.count} position${latentSaving.count === 1 ? "" : "s"} reading as a proven-unnecessary role — the natural first move in phasing, since closing a funded vacancy costs no redundancy.`
+            : `No position here reads cleanly as a latent saving yet — the vacancy-rationalisation play has the exact candidates and its own guardrails.`,
+      },
+      conditions: [
+        `Every reading is a proposal, not a verdict — recruitment failure, latent saving and agency-papered gap need confirming against what's actually happening in each unit.`,
+        vacancy.agingComputable
+          ? `Aged from a supplied vacancy date.`
+          : `No file supplied a vacancy date anywhere, so ages and readings for individual positions are less certain than the totals above.`,
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: totalCost,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* D3. workforce mix — classification drift against a same-function peer  */
+/* ------------------------------------------------------------------ */
+
+function workforceMixRead(mix: WorkforceMixResult): Hypothesis[] {
+  const candidates = mix.byUnit
+    .filter(
+      (u) =>
+        u.seniorShare !== null &&
+        u.peerMedianSeniorShare !== null &&
+        u.seniorShare >= Math.max(u.peerMedianSeniorShare * COMPARISON_OUTLIER_MULTIPLE, u.peerMedianSeniorShare + 0.1)
+    )
+    .sort((a, b) => (b.seniorShare ?? 0) - (a.seniorShare ?? 0))
+    .slice(0, 2);
+
+  if (candidates.length === 0) return [];
+
+  return candidates.map((u) => ({
+    id: `workforce-mix:${u.department}`,
+    lens: "Workforce composition",
+    unit: u.department,
+    title: `${u.department} runs ${pct(u.seniorShare!)} senior-graded against ${pct(u.peerMedianSeniorShare!)} for its peer departments in ${u.functionGroup}`,
+    thinking:
+      `Read against other departments inside the same function — never the whole organisation, since a genuinely ` +
+      `specialist team is not drift just for being senior-heavy. That comparator is what makes this worth a look: ` +
+      `${u.department} sits well above its own peers, not just above an organisation-wide average that a specialist ` +
+      `unit would always clear. Two things produce this gap and only one is worth acting on: the work here genuinely ` +
+      `demands more seniority than its peers, or "senior" has become a retention device rather than a reflection of ` +
+      `the role's actual demands.` +
+      (u.fragmentationCount > 0
+        ? ` It also carries ${u.fragmentationCount} position${u.fragmentationCount === 1 ? "" : "s"} at a small FTE fraction, which multiplies coordination overhead independently of grade.`
+        : ""),
+    signals: [
+      { label: "Senior-graded share", value: pct(u.seniorShare!), comparison: `peer median ${pct(u.peerMedianSeniorShare!)}` },
+      { label: "Graded positions", value: `${u.gradedCount} of ${u.headcount}` },
+      { label: "Part-time fragmentation", value: String(u.fragmentationCount) },
+      { label: "Median tenure", value: u.medianTenureYears !== null ? `${u.medianTenureYears.toFixed(1)} years` : "not computable" },
+    ],
+    action:
+      `Check ${u.department}'s work against its peers directly: is the complexity genuinely different, or has grading ` +
+      `drifted upward over time without anyone reviewing the total? This is a classification review, not a headcount ` +
+      `cut — rebalancing mix carries its own clinical-governance and consultation constraints, distinct from removal.`,
+    playId: null,
+    playName: null,
+    prize: {
+      amount: null,
+      nature: "confidence",
+      statement:
+        "A classification question, not a priced saving — confirming drift versus genuine complexity is what decides whether there's anything to size here at all.",
+    },
+    conditions: [
+      `Peer comparator is same-function departments only (${u.functionGroup}), never organisation-wide.`,
+      `${mix.skillMixNote}`,
+    ],
+    strength: "observed",
+    verdict: null,
+    weight: (u.seniorShare! - u.peerMedianSeniorShare!) * u.headcount * 10000,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* E2. key-person risk — single points of failure, a caution not a hold  */
+/* ------------------------------------------------------------------ */
+
+function keyPersonRiskRead(risk: KeyPersonRiskResult): Hypothesis[] {
+  if (risk.flagged.length === 0) return [];
+
+  const succession = risk.flagged.filter((f) => f.triage === "succession-plan");
+  const protect = risk.flagged.filter((f) => f.triage === "protect");
+  const redesignCarefully = risk.flagged.filter((f) => f.triage === "redesign-carefully");
+
+  return [
+    {
+      id: "key-person-risk:overview",
+      lens: "Risk and controls",
+      unit: null,
+      title: `${risk.flagged.length} single point${risk.flagged.length === 1 ? "" : "s"} of failure in this structure`,
+      thinking:
+        `${risk.soleIncumbentCount} role${risk.soleIncumbentCount === 1 ? " is" : "s are"} the sole incumbent of a ` +
+        `control position, ${risk.uniqueClassificationCount} hold a classification nobody else in the organisation ` +
+        `carries, and ${risk.tenureCliffCount} combine a critical role with ${risk.tenureCliffThresholdYears}+ years' ` +
+        `tenure — a continuity risk in its own right, independent of whether the role is formally a control point. ` +
+        `This is a caution, not a hold: a scenario can proceed against any of these deliberately, which is exactly ` +
+        `what separates it from the protected-controls register.`,
+      signals: [
+        { label: "Sole incumbents", value: String(risk.soleIncumbentCount) },
+        { label: "Unique classifications", value: String(risk.uniqueClassificationCount) },
+        { label: "Tenure cliffs", value: String(risk.tenureCliffCount) },
+        { label: "Triaged \"protect\" (also E1-held)", value: String(protect.length) },
+        { label: "Triaged \"succession-plan\"", value: String(succession.length) },
+        { label: "Triaged \"redesign-carefully\"", value: String(redesignCarefully.length) },
+      ],
+      action:
+        `Build a bench for the ${succession.length} succession-plan role${succession.length === 1 ? "" : "s"} first — ` +
+        `those carry no E1 hold, so a redesign can reach them before a plan exists to backfill the knowledge. Every ` +
+        `scenario's impact summary now carries a "key-person roles touched" count by default, so this doesn't have to be checked separately each time.`,
+      playId: null,
+      playName: null,
+      prize: {
+        amount: null,
+        nature: "confidence",
+        statement: "A risk map, not a saving — the point is knowing which roles a scenario is quietly leaning on before it's modelled, not after.",
+      },
+      conditions: [
+        `"Control position" is proxied as protected-or-manager in this build — there's no separate control-point register beyond E1's own.`,
+        `A sole incumbent who is also E1-protected is triaged "protect": the E1 hold already keeps the role in place, and this flag adds the reminder to also build depth around it.`,
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: risk.flagged.length * 5000,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* E1 (G1 archetype 11). control gaps — a mandated role nobody holds     */
+/* ------------------------------------------------------------------ */
+
+function controlGapRead(metrics: DiagnosticMetrics): Hypothesis[] {
+  if (metrics.controlGaps.length === 0) return [];
+
+  const gaps: ProtectedRoleRule[] = metrics.controlGaps;
+  return [
+    {
+      id: "control-gap:overview",
+      lens: "Risk and controls",
+      unit: null,
+      title: `${gaps.length} mandated role${gaps.length === 1 ? "" : "s"} in the protected-role register ${gaps.length === 1 ? "has" : "have"} no match in this establishment`,
+      thinking:
+        `${gaps.map((g) => g.reason).join("; ")}. None of these ${gaps.length === 1 ? "is" : "are"} a null result — ` +
+        `the register names a role Atlas expects a functioning establishment to hold, by statute, governance ` +
+        `mandate or safety instrument, and no title in this file matches it. Either the role exists under a title ` +
+        `the register doesn't recognise, or the coverage genuinely isn't there.`,
+      signals: gaps.map((g) => ({ label: g.id, value: g.tier, comparison: g.instrument })),
+      action:
+        `Confirm with governance or compliance whether each of these is genuinely unfilled or held under a title ` +
+        `this register doesn't recognise yet — if the latter, add the title as a match rather than leaving the gap ` +
+        `showing on every future read.`,
+      playId: null,
+      playName: null,
+      prize: {
+        amount: null,
+        nature: "confidence",
+        statement: "A compliance exposure, not a saving — the register is telling you what's missing, not what to cut.",
+      },
+      conditions: [
+        `This reads off ${gaps.length === 1 ? "a rule" : "rules"} in config/protected-roles.json's register — a role genuinely outside that register (not statutory, governance-mandated or safety-critical) would never surface here.`,
+        `A title match failure and a genuine vacancy look identical to this register — only someone in governance can tell them apart.`,
+      ],
+      strength: "observed",
+      verdict: null,
+      weight: gaps.length * 4000,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* F1. peer benchmarking — the outside comparator, in bands              */
+/* ------------------------------------------------------------------ */
+
+function peerBenchmarkRead(peer: PeerBenchmarkResult): Hypothesis[] {
+  const flagged = peer.readings.filter((r) => r.verdict === "over peers" || r.verdict === "under peers");
+  if (flagged.length === 0) return [];
+
+  return flagged.map((r) => ({
+    id: `peer-benchmark:${r.metric}`,
+    lens: "External reference",
+    unit: null,
+    title: `${r.label} reads ${r.verdict} against the peer band${peer.cohort.provisional ? " (provisional)" : ""}`,
+    thinking:
+      `${r.label} runs ${r.unit === "ratio" ? pct(r.value) : r.value.toFixed(1)} against a peer band of ` +
+      `${r.unit === "ratio" ? `${pct(r.bandMin ?? 0)}-${pct(r.bandMax ?? 0)}` : `${r.bandMin}-${r.bandMax}`} for ` +
+      `a ${peer.cohort.label} organisation — the one comparison on this screen read against the outside world ` +
+      `rather than this organisation's own median. The figure is ${r.denominatorBasis}.` +
+      (r.note ? ` ${r.note}` : ""),
+    signals: [
+      { label: r.label, value: r.unit === "ratio" ? pct(r.value) : r.value.toFixed(1) },
+      {
+        label: "Peer band",
+        value:
+          r.unit === "ratio"
+            ? `${pct(r.bandMin ?? 0)}-${pct(r.bandMax ?? 0)}`
+            : `${r.bandMin}-${r.bandMax}`,
+      },
+      { label: "Cohort", value: peer.cohort.label },
+      ...(peer.cohort.provisional ? [{ label: "Band status", value: "provisional — outside Atlas's calibrated size range" }] : []),
+    ],
+    action:
+      r.verdict === "over peers"
+        ? `Check whether this reflects genuine complexity the peer band doesn't capture before treating the gap as a finding on its own — it's a place to look, not a priced saving.`
+        : `A low reading here can mean genuine efficiency or the wrong base — check ${r.denominatorBasis} before reading it as healthy.`,
+    playId: null,
+    playName: null,
+    prize: {
+      amount: null,
+      nature: "confidence",
+      statement: "A peer-band read, not a priced finding — bands say where to look against the outside world, never a point estimate or a saving.",
+    },
+    conditions: [
+      `This is a peer-band read (${peer.cohort.label}), not this organisation's own median — the other comparison on this screen that's true of, alongside c3's back-office bands.`,
+      peer.cohort.provisional
+        ? `Atlas has no peer data differentiated for this organisation's size — the band shown is the one calibrated cohort's, marked provisional rather than treated as calibrated here.`
+        : `This organisation's size falls inside Atlas's one calibrated peer cohort.`,
+    ],
+    strength: "observed",
+    verdict: null,
+    weight: 3000,
+  }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -1219,6 +1890,14 @@ function wouldUnlock(
     out.push(
       `Group revenue — even one figure. Puts the ${currency(metrics.totalCost)} labour cost on this ` +
         `establishment into a ratio rather than leaving it as a number.`
+    );
+  }
+
+  if (isPublicHealthSector(business) && metrics.clinicalFte > 0) {
+    out.push(
+      `Clinical activity data — clinical activity units or weighted activity units, alongside the ` +
+        `${metrics.clinicalFte.toFixed(0)} clinical FTE Atlas can already see. Unlocks cost per weighted activity ` +
+        `unit and activity per clinical FTE, read against the safe-staffing floor rather than tuned against it.`
     );
   }
 

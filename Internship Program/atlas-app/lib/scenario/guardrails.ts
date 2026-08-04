@@ -1,4 +1,5 @@
 import { matchProtectedRole } from "@/lib/protected-roles/match";
+import { tagNodes } from "@/lib/graph/tagging";
 import type { Position } from "@/lib/graph/types";
 
 export interface GuardResult {
@@ -11,8 +12,8 @@ export interface GuardResult {
  * mutation passes through — never relied on in the UI layer alone, so it
  * can't be bypassed by a drag, a typed move, or a future add/remove control.
  */
-export function checkProtected(position: Position): GuardResult {
-  const match = matchProtectedRole(position.title);
+export function checkProtected(position: Position, isUnitRoster = false): GuardResult {
+  const match = matchProtectedRole(position.title, isUnitRoster);
   if (!match) return { blocked: false };
   return {
     blocked: true,
@@ -68,4 +69,53 @@ export function checkCycle(
 /** Deterministic tiebreak for two equidistant drop targets: lowest id wins. */
 export function tiebreakNearest(candidateIds: string[]): string {
   return [...candidateIds].sort()[0];
+}
+
+/**
+ * H1's guardrail 3: a manager who would receive a new report must stay
+ * inside their own archetype's span ceiling afterwards — otherwise a
+ * consolidation move quietly manufactures the exact wide-span problem B1
+ * flags elsewhere. Checked against the position set *after* the move, so it
+ * reads the receiving manager's real post-change headcount, not a guess.
+ *
+ * Reuses `tagNodes` rather than re-deriving the archetype ceiling directly —
+ * a second, parallel span-health calculation is exactly how this guardrail
+ * would end up disagreeing with B1 itself about what "wide" means for a
+ * given role. This is also the only way to inherit A2's roster exemption for
+ * free: a Nurse Unit Manager absorbing more clinical reports is staffing a
+ * bigger roster, not running a wider management span, and `tagNodes` already
+ * knows that — a guardrail that didn't reuse it would have wrongly blocked
+ * exactly this move (caught live, against `wide-span-redistribution`'s own
+ * candidates, while building this guardrail).
+ */
+export function checkPostChangeSpan(positionsAfter: Position[], rootId: string | null, managerId: string): GuardResult {
+  const tagged = tagNodes(positionsAfter, rootId);
+  const manager = tagged.find((n) => n.id === managerId);
+  if (!manager || manager.flags.spanHealth !== "wide") return { blocked: false };
+
+  const span = positionsAfter.filter((p) => p.managerId === managerId).length;
+  return {
+    blocked: true,
+    reason:
+      `Would leave "${manager.title}" with ${span} direct reports — a wide span against the ${manager.flags.spanArchetype} ` +
+      `archetype this move would push past. Widen it deliberately as its own move if that's the intent; a consolidation ` +
+      `shouldn't manufacture a wide span as a side effect.`,
+  };
+}
+
+/**
+ * H1's guardrail: a roster structure (A2's `unitRoster` flag — a manager
+ * staffing a clinical/frontline roster, not running a management span) is
+ * never touched by a management-chain move (collapse-layer, remove-single-
+ * report-chain, widen-span). The lead is already auto-held by E1; this
+ * extends the same exemption to the roster's *members*, who aren't
+ * protected roles in their own right but whose reporting line a layer-
+ * collapse or span-widening move should never reach.
+ */
+export function checkRosterExempt(isRosterMember: boolean, patternLabel: string): GuardResult {
+  if (!isRosterMember) return { blocked: false };
+  return {
+    blocked: true,
+    reason: `This position sits inside a clinical/frontline roster (A2) — never touched by a ${patternLabel} move, regardless of its own protection status.`,
+  };
 }

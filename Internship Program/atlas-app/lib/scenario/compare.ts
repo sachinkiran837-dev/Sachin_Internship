@@ -1,5 +1,6 @@
 import { computeDelta, computeMetrics } from "@/lib/metrics/diagnostics";
 import { matchProtectedRole } from "@/lib/protected-roles/match";
+import { buildKeyPersonRisk, keyPersonRolesTouched } from "@/lib/analysis/keyPersonRisk";
 import { getBaselineRootId } from "@/db/repo";
 import type { DiagnosticMetrics, MetricsDelta, Position } from "@/lib/graph/types";
 
@@ -26,6 +27,16 @@ export function findSafeStaffingBreaches(baseline: Position[], scenario: Positio
   return touched;
 }
 
+export function allTouchedIds(baseline: Position[], scenario: Position[]): Set<string> {
+  const scenarioById = new Map(scenario.map((p) => [p.id, p] as const));
+  const touched = new Set<string>();
+  for (const p of baseline) {
+    const stillPresent = scenarioById.get(p.id);
+    if (!stillPresent || stillPresent.managerId !== p.managerId) touched.add(p.id);
+  }
+  return touched;
+}
+
 export interface ScenarioComparison {
   scenarioId: string;
   name: string;
@@ -39,16 +50,18 @@ export function compareScenarios(
 ): { baselineMetrics: DiagnosticMetrics; comparisons: ScenarioComparison[] } {
   const rootId = getBaselineRootId(baselinePositions);
   const baselineMetrics = computeMetrics(baselinePositions, rootId);
+  const keyPersonFlags = buildKeyPersonRisk(baselinePositions, rootId).flagged;
 
   const comparisons = scenarios.map((s) => {
     const scenarioRootId = getBaselineRootId(s.positions) ?? rootId;
     const metrics = computeMetrics(s.positions, scenarioRootId);
     const breaches = findSafeStaffingBreaches(baselinePositions, s.positions);
+    const touched = allTouchedIds(baselinePositions, s.positions);
     return {
       scenarioId: s.id,
       name: s.name,
       metrics,
-      delta: computeDelta(baselineMetrics, metrics, breaches),
+      delta: computeDelta(baselineMetrics, metrics, breaches, keyPersonRolesTouched(keyPersonFlags, touched)),
     };
   });
 

@@ -1,0 +1,68 @@
+{
+  "_note": "Span-of-control calibration defaults by work archetype, per the B1 skill spec: a single universal band conflates a call-centre supervisor with a project director, and flags whichever one the band wasn't tuned for. A role matching none of these keeps the organisation's flat band from span-thresholds.json (the professional/knowledge-work default) rather than an invented one.",
+  "_matching": "Matched on title first, then function group, in the order listed below — first match wins. Keywords of three characters or fewer must appear as whole words (so 'coo' doesn't match inside a longer word), longer keywords match as a substring. flagUnder/flagOver, where given, are the actual thin/wide boundary; healthyMin/healthyMax describe the ideal band shown alongside it. matchFunctionGroups is deliberately unused for now — a whole function group (e.g. 'Operations') is too coarse a signal for a supervision-style archetype and would reclassify unrelated managers alongside the ones it's meant for; it stays available for a later phase with a sharper signal (e.g. role/site data).",
+  "archetypes": [
+    {
+      "id": "executive",
+      "label": "Executive",
+      "healthyMin": 4,
+      "healthyMax": 7,
+      "matchTitles": [
+        "chief executive",
+        "chief operating officer",
+        "chief financial officer",
+        "chief information officer",
+        "chief technology officer",
+        "chief people officer",
+        "chief medical officer",
+        "chief nursing officer",
+        "chief of staff",
+        "managing director",
+        "executive director",
+        "general manager",
+        "ceo",
+        "coo",
+        "cfo",
+        "cio",
+        "cto",
+        "chro"
+      ],
+      "matchFunctionGroups": []
+    },
+    {
+      "id": "complex-specialist",
+      "label": "Complex specialist / project leadership",
+      "healthyMin": 3,
+      "healthyMax": 5,
+      "matchTitles": [
+        "principal",
+        "specialist lead",
+        "chief architect",
+        "clinical director",
+        "research director",
+        "program director",
+        "programme director",
+        "project director",
+        "portfolio director"
+      ],
+      "matchFunctionGroups": []
+    },
+    {
+      "id": "transactional",
+      "label": "Transactional / standardized supervision",
+      "healthyMin": 10,
+      "healthyMax": 15,
+      "flagOver": 20,
+      "matchTitles": [
+        "team leader",
+        "shift leader",
+        "shift supervisor",
+        "supervisor",
+        "roster coordinator",
+        "contact centre",
+        "call centre"
+      ],
+      "matchFunctionGroups": []
+    }
+  ]
+}

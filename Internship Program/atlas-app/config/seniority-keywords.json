@@ -1,0 +1,4 @@
+{
+  "_note": "D3's classification-drift signal — keywords matched against the `grade` field itself (not the job title), since the question is whether the pay classification reads senior, not whether the role sounds senior. Deliberately narrow: this flags a candidate for a same-function peer comparison, never a verdict on its own — a specialist unit that is genuinely senior-heavy is not drift, and only the peer comparison in lib/analysis/workforceMix.ts can tell the two apart.",
+  "matchGrades": ["senior", "principal", "lead", "advanced", "expert", "specialist"]
+}

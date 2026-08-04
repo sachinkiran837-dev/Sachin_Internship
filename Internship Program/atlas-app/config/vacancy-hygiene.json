@@ -1,0 +1,5 @@
+{
+  "_note": "d2-vacancy-establishment-hygiene's own spec asserts no universal long-vacant threshold — it names this as engagement-configurable, to be confirmed with the client rather than imported from elsewhere. 90 days is a placeholder default (a quarter, the natural first checkpoint after a role opens) so the skill produces something before that conversation happens, not a claim about what 'long' means for this organisation.",
+  "longVacantThresholdDays": 90,
+  "agingUnavailableNote": "No file supplied a vacancy date, so every vacant position's age is not computable — vacancy rate and funded-but-vacant cost are still shown; only the aging and reading proposal are affected."
+}

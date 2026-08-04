@@ -165,6 +165,10 @@ const CANONICAL_ORDER: CanonicalField[] = [
   "cost",
   "fte",
   "status",
+  "site",
+  "grade",
+  "startDate",
+  "vacantSince",
 ];
 
 interface NormalisedFile {

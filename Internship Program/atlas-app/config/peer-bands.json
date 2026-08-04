@@ -1,0 +1,19 @@
+{
+  "_note": "f1-peer-benchmarking's own peer bands — the outside comparator, distinct from every absolute internal reference already in the app (layer-bands.json, contingent-reliance-bands.json). Layers and contingent share are not duplicated here: this module imports those two configs directly so the two skills can never quietly drift apart on the same figure, which is also why the skill spec's own worked example cites exactly those numbers (5-6 layers, 5-8% contingent, >15% structural). Management overhead is the one genuinely new band this skill adds, at the figure the spec's own worked example states (10-13%).",
+  "_cohorts": "Atlas has one calibrated cohort today — a mid-size (100-2,000 headcount), multi-directorate organisation, commercial or public-health (the only industry split Atlas can honestly derive from a free-text sector sentence). An organisation outside that headcount range still gets a verdict, because a provisional read against the only band Atlas has is more useful than none — but it is marked provisional rather than presented as calibrated for its size, per the skill's own edge-case rule ('a widened or provisional band, not a force-fitted comparator').",
+  "sizeBands": {
+    "small": { "maxHeadcount": 100, "label": "under 100 FTE" },
+    "mid": { "maxHeadcount": 2000, "label": "100-2,000 FTE" },
+    "large": { "label": "2,000+ FTE" }
+  },
+  "calibratedSizeBand": "mid",
+  "managementOverheadShare": {
+    "min": 0.10,
+    "max": 0.13,
+    "note": "10-13% of cost, per the skill spec's own worked example. Read against the non-clinical cost base for a public-health organisation, not total cost — the same denominator-consistency discipline b4-organizational-shape applies to its own management-cost-share figure."
+  },
+  "corporateFunctionGroups": {
+    "groups": ["Finance", "People", "Technology", "Corporate & Governance", "Support Services"],
+    "note": "The 'centre' half of the seven function-group buckets in config/function-groups.json — Operations (delivery) and Commercial (revenue-facing) are excluded because neither is corporate overhead in the sense this ratio means. No numeric peer band is stated for this one in the skill spec's worked examples, so Atlas shows the ratio and its denominator basis without a verdict, the same honesty C3 already applies to Technology's back-office band."
+  }
+}

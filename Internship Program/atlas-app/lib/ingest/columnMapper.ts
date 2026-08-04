@@ -44,8 +44,6 @@ const SYNONYMS = {
     "job family",
     "branch",
     "depot",
-    "site",
-    "location",
     "region",
     "portfolio",
     "workstream",
@@ -126,6 +124,26 @@ const SYNONYMS = {
   ],
   fte: ["fte", "full time equivalent", "contracted fte", "fte value", "contracted hours"],
   status: ["status", "position status", "employment status", "employment type"],
+  // Physical location, not organisational unit — C1's function footprint
+  // needs this kept apart from department, so "Site" and "Department" in the
+  // same file each land on their own field rather than one beating the other
+  // for the same slot. "Branch", "Depot" and "Region" stay department
+  // synonyms (see above) because for a good share of real establishments
+  // that word names the org unit, not a place — a client whose only such
+  // column is genuinely a site can say so in the instructions box.
+  site: ["site", "site name", "location", "campus", "facility"],
+  // D3's classification/grade field. Deliberately not called "classification"
+  // internally — that word is already taken by the AI/keyword role classifier
+  // (management level + clinical flag) built at ingest, and reusing it here
+  // would conflate two unrelated things.
+  grade: ["grade", "classification", "pay grade", "salary grade", "job grade", "job level", "career level", "band", "pay band", "level"],
+  // D3/E2's tenure input. "Anniversary date" and "seniority date" are real
+  // HR-system terms for the same fact stated a different way.
+  startDate: ["start date", "hire date", "date of hire", "date started", "date commenced", "commencement date", "employment start date", "anniversary date", "seniority date"],
+  // D2's vacancy-aging input — a column real vacancy/establishment reports
+  // carry (when a position was budgeted-but-unfilled from), distinct from
+  // "status", which only says filled/vacant/contingent, not since when.
+  vacantSince: ["vacancy date", "date vacated", "vacant since", "vacancy since", "date position vacated", "vacant from"],
 } satisfies Record<string, string[]>;
 
 /**

@@ -1,4 +1,6 @@
 {
+  "_tierOrder": ["statutory", "governance", "safety"],
+  "_tierOrderNote": "E1: when two rules match the same role at different tiers, the highest tier in this list wins — statutory first (a hard legal appointment requirement), then governance, then safety. This is a stated ranking so it can be argued with, not an implicit assumption buried in match.ts.",
   "rules": [
     {
       "id": "chief-executive",

@@ -1,0 +1,30 @@
+{
+  "_note": "E3's transition-cost floor: the Fair Work Act 2009 (Cth) National Employment Standards minimum notice (s117) and redundancy pay (s119) tables — real, federal, and the same for every award or EBA unless that instrument's own terms improve on them. Long service leave is deliberately not modelled here: it is state-based in Australia, not federal, and a single formula would be wrong for a majority of positions depending on jurisdiction — it always reads 'not computable, confirm jurisdiction' instead of a guessed figure.",
+  "instrument": "Fair Work Act 2009 (Cth) ss117, 119 (National Employment Standards)",
+  "noticeWeeksByTenure": [
+    { "underYears": 1, "weeks": 1 },
+    { "underYears": 3, "weeks": 2 },
+    { "underYears": 5, "weeks": 3 },
+    { "underYears": null, "weeks": 4 }
+  ],
+  "noticeOver45Bonus": {
+    "weeks": 1,
+    "minAgeYears": 45,
+    "minTenureYears": 2,
+    "note": "An extra week applies if the employee is over 45 with at least 2 years' continuous service. Atlas has no age field, so this bonus is never applied — the notice figure is therefore a floor, not a ceiling."
+  },
+  "redundancyWeeksByTenure": [
+    { "underYears": 1, "weeks": 0 },
+    { "underYears": 2, "weeks": 4 },
+    { "underYears": 3, "weeks": 6 },
+    { "underYears": 4, "weeks": 7 },
+    { "underYears": 5, "weeks": 8 },
+    { "underYears": 6, "weeks": 10 },
+    { "underYears": 7, "weeks": 11 },
+    { "underYears": 8, "weeks": 13 },
+    { "underYears": 9, "weeks": 14 },
+    { "underYears": 10, "weeks": 16 },
+    { "underYears": null, "weeks": 12 }
+  ],
+  "redundancyWeeksByTenureNote": "The NES table genuinely drops from 16 to 12 weeks at the 10-year mark — not a typo, a real feature of s119. NES redundancy pay assumes an employer that is not a 'small business employer' (fewer than 15 employees), which is exempt from NES redundancy pay entirely; this engine assumes the establishment is not exempt unless told otherwise."
+}

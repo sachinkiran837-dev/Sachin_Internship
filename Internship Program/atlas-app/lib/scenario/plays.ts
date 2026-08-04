@@ -1,8 +1,10 @@
 import { currency } from "@/lib/format/currency";
 import assumptions from "@/config/scenario-assumptions.json";
 import spanConfig from "@/config/span-thresholds.json";
+import successionConfig from "@/config/succession-titles.json";
 import { tagNodes } from "@/lib/graph/tagging";
 import { matchProtectedRole } from "@/lib/protected-roles/match";
+import { baseTitle, stripHireTypePrefix } from "@/lib/analysis/titleKey";
 import type { LayoutNode, Position, SpanThresholds } from "@/lib/graph/types";
 
 const SPAN: SpanThresholds = spanConfig;
@@ -128,6 +130,19 @@ function isTouchable(n: LayoutNode, rootId: string | null, mode: TouchMode = "st
   return mode === "commercial" || !n.clinicalFlag;
 }
 
+/**
+ * B3's legitimate-exception rule: a single-report role matching a deputy,
+ * acting or succession title is a transitional or succession structure, not
+ * a relay layer, and must not be counted as a delayering candidate without
+ * saying so.
+ */
+const SUCCESSION_TITLES = (successionConfig as { matchTitles: string[] }).matchTitles;
+
+function isSuccessionRole(n: LayoutNode): boolean {
+  const title = n.title.toLowerCase();
+  return SUCCESSION_TITLES.some((kw) => title.includes(kw));
+}
+
 function protectedSkipNote(skipped: LayoutNode[], mode: TouchMode = "structural"): string | null {
   if (skipped.length === 0) return null;
   const distinct = [...new Set(skipped.map((n) => n.title))];
@@ -150,18 +165,6 @@ function empty(playId: string, summary: string, method: string): PlayAnalysis {
     method,
     guardrailNote: null,
   };
-}
-
-/** Strips the hire-type prefix so "Agency Registered Nurse" benchmarks against "Registered Nurse". */
-const CONTINGENT_PREFIXES = /^(agency|contract|contractor|locum|temp|temporary|casual|interim)\s+/i;
-const CONTINGENT_SUFFIXES = /\s+\((agency|contract|locum|temp|casual)\)$/i;
-
-function baseTitle(title: string): string {
-  return title
-    .replace(CONTINGENT_PREFIXES, "")
-    .replace(CONTINGENT_SUFFIXES, "")
-    .trim()
-    .toLowerCase();
 }
 
 const rootIdOf = (nodes: LayoutNode[]) => nodes.find((n) => n.managerId === null)?.id ?? null;
@@ -193,7 +196,11 @@ const passThroughLayers: ScenarioPlay = {
     });
 
     const skipped = relays.filter((n) => !isTouchable(n, rootId));
-    const candidates = relays.filter((n) => isTouchable(n, rootId));
+    const touchable = relays.filter((n) => isTouchable(n, rootId));
+    // B3's legitimate exception: a deputy/acting/succession title held in a
+    // single-report position is a transitional structure, not a relay layer.
+    const successionHeld = touchable.filter(isSuccessionRole);
+    const candidates = touchable.filter((n) => !isSuccessionRole(n));
 
     if (candidates.length === 0) {
       return empty(
@@ -204,6 +211,13 @@ const passThroughLayers: ScenarioPlay = {
     }
 
     const total = candidates.reduce((s, n) => s + annualCost(n), 0);
+
+    const notes = [protectedSkipNote(skipped)];
+    if (successionHeld.length > 0) {
+      notes.push(
+        `Left ${successionHeld.length} deputy/acting/succession role${successionHeld.length === 1 ? "" : "s"} out of this list — a single-report deputy or acting arrangement is a transitional structure, not a relay layer, and needs its own conversation.`
+      );
+    }
 
     return {
       playId: this.id,
@@ -221,7 +235,7 @@ const passThroughLayers: ScenarioPlay = {
       summary: `${candidates.length} relay layer${candidates.length === 1 ? "" : "s"} sit between two management levels without widening any span.`,
       method:
         "Saving is the fully-loaded cost (cost × FTE) of each relay role. Their reports are re-parented to the grandparent, so no work is removed — only the layer.",
-      guardrailNote: protectedSkipNote(skipped),
+      guardrailNote: notes.filter(Boolean).join(" ") || null,
     };
   },
 };
@@ -281,7 +295,7 @@ const agencyPremium: ScenarioPlay = {
 
       if (peers.length > 0) {
         benchmark = median(peers);
-        basis = `benchmarked against ${peers.length} permanent "${n.title.replace(CONTINGENT_PREFIXES, "")}" role${peers.length === 1 ? "" : "s"}`;
+        basis = `benchmarked against ${peers.length} permanent "${stripHireTypePrefix(n.title)}" role${peers.length === 1 ? "" : "s"}`;
         benchmarked++;
       } else {
         benchmark = current * (1 - assumptions.agencyPremiumFallbackRate);

@@ -6,6 +6,7 @@ import {
   getBaselinePositions,
   getBaselineRootId,
   getBusinessContext,
+  getIssues,
   getOrg,
 } from "@/db/repo";
 import { buildFindingsResult, generateNarrative } from "@/lib/findings/generate";
@@ -40,11 +41,13 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
   const scenario = await getActiveScenario(orgId);
   const positions = scenario?.positions ?? baseline;
   const business = await getBusinessContext(orgId);
+  const issues = await getIssues(orgId);
 
   const { hypotheses, analysis, metrics, wouldUnlock, method } = buildHypotheses(
     positions,
     rootId,
-    business
+    business,
+    issues
   );
   const structural = buildFindingsResult(metrics);
 
@@ -64,9 +67,11 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
           <h1 className="mt-1 text-2xl">What we think is happening here</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             Every hypothesis below carries the same three parts: what the data suggests is
-            happening, what to do about it, and what you get if you do. The comparisons are against
-            this organisation&rsquo;s own median unit — never an outside benchmark — so every figure
-            can be checked against the table further down this page.
+            happening, what to do about it, and what you get if you do. Almost every comparison is
+            against this organisation&rsquo;s own median unit, so the figure can be checked against
+            the table further down this page — the handful marked &ldquo;External reference&rdquo; or
+            &ldquo;Back-office benchmarks&rdquo; read outward against a stated peer band instead, and
+            say so plainly.
           </p>
         </div>
 

@@ -1,0 +1,6 @@
+{
+  "_note": "d1-agency-contingent-reliance's peer-band constants, named explicitly in the skill spec rather than derived from this organisation's own median — the one place D1 reads against an outside figure, same discipline as C3's back-office bands. Shared with D2's agency-overlay step (STRUCTURAL_AGENCY_THRESHOLD there reads this same figure) so the two skills never disagree about where 'structural' starts.",
+  "peerBandMin": 0.05,
+  "peerBandMax": 0.08,
+  "structuralThreshold": 0.15
+}

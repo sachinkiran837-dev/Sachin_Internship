@@ -1,0 +1,21 @@
+{
+  "_note": "c3-back-office-efficiency-benchmarks' sector-adjusted reference bands — external, absolute constants, unlike every self-relative comparison elsewhere in Atlas (see lib/analysis/functions.ts's own note on why that engine deliberately never uses one). This is the one place Atlas is specified to read a function against an outside number rather than the organisation's own median, and it is kept in its own clearly labelled config and module so it is never mistaken for, or blended into, the self-relative engine's findings.",
+  "People": {
+    "label": "HR",
+    "kind": "fte-per-100",
+    "min": 1.0,
+    "max": 1.4,
+    "note": "1.0-1.4 FTE per 100 organisational FTE, a commercial-sector default."
+  },
+  "Finance": {
+    "label": "Finance",
+    "kind": "percent-of-revenue",
+    "commercial": { "min": 0.006, "max": 0.012 },
+    "note": "0.6-1.2% of revenue in a commercial setting. Public-health finance functions have a sector-specific variant with no single default — Atlas shows the ratio and reads it against the organisation's own funding model instead of a band."
+  },
+  "Technology": {
+    "label": "Technology",
+    "kind": "none",
+    "note": "No fixed band — IT's right size reads against digital intensity, which an establishment file cannot state. Cost share and FTE/100 are shown without a verdict."
+  }
+}

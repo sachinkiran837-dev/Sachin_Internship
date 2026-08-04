@@ -1,0 +1,9 @@
+{
+  "_note": "c2-duplication-detection's capture band — a 20-35% indicative range on confirmed duplicated cost. This is never the whole duplicated cost: some of every parallel build-out is genuine local variation, and claiming the full figure as recoverable is the most common way a consolidation business case overstates itself.",
+  "captureBandMin": 0.20,
+  "captureBandMax": 0.35,
+  "minInstanceHeadcount": 3,
+  "minInstanceHeadcountNote": "Below this, an instance is a stray hire at a satellite site, not a parallel build-out worth pricing as duplication.",
+  "eligibleArchetypes": ["transactional"],
+  "eligibleArchetypesNote": "Only transactional-archetype functions are scanned for duplication. Site-operational work is expected to be distributed (excluded by design, same as clinical presence). Advisory work's own recommended pattern is hub-and-spoke — a deliberate centre-plus-local-partner split, not the accidental parallel build-out this skill prices."
+}

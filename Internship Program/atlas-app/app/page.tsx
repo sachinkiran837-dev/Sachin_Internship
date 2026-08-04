@@ -26,8 +26,8 @@ export default async function Home() {
         <CardHeader>
           <CardTitle>Start a new establishment</CardTitle>
           <CardDescription>
-            Say what the business is doing first, then hand over the files. Every upload becomes its
-            own org with a confirmed baseline graph.
+            Hand over the files — Atlas works out what each one is. Every upload becomes its own
+            org with a confirmed baseline graph.
           </CardDescription>
         </CardHeader>
         <CardContent>

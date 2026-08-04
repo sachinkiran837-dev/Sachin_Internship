@@ -1,4 +1,6 @@
 {
+  "_note": "The default span-of-control band, used for any role that doesn't match one of the work-archetype rules in span-archetypes.json (the 'professional / knowledge work' case, per the B1 skill spec). unitRosterMin is the separate A2 rule: a manager whose reports are predominantly clinical/frontline and whose span is at least this size is staffing a roster, not running a management span, and is exempt from thin/wide flagging entirely.",
   "healthyMin": 4,
-  "healthyMax": 8
+  "healthyMax": 8,
+  "unitRosterMin": 6
 }

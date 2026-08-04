@@ -8,7 +8,8 @@ import {
   getOrg,
 } from "@/db/repo";
 import { computeDelta, computeMetrics } from "@/lib/metrics/diagnostics";
-import { findSafeStaffingBreaches } from "@/lib/scenario/compare";
+import { allTouchedIds, findSafeStaffingBreaches } from "@/lib/scenario/compare";
+import { buildKeyPersonRisk, keyPersonRolesTouched } from "@/lib/analysis/keyPersonRisk";
 import { analyseAllPlays } from "@/lib/scenario/plays";
 import { OrgNav } from "@/components/OrgNav";
 import { PlayCard } from "@/components/scenario/PlayCard";
@@ -33,7 +34,10 @@ export default async function ScenarioDetailPage({
   const baselineMetrics = computeMetrics(baseline, rootId);
   const scenarioMetrics = computeMetrics(scenario.positions, getBaselineRootId(scenario.positions) ?? rootId);
   const breaches = findSafeStaffingBreaches(baseline, scenario.positions);
-  const delta = computeDelta(baselineMetrics, scenarioMetrics, breaches);
+  const touchedIds = allTouchedIds(baseline, scenario.positions);
+  const keyPersonFlags = buildKeyPersonRisk(baseline, rootId).flagged;
+  const keyPersonTouched = keyPersonRolesTouched(keyPersonFlags, touchedIds);
+  const delta = computeDelta(baselineMetrics, scenarioMetrics, breaches, keyPersonTouched);
   const auditLog = await listAuditLog(scenarioId);
 
   // Re-analysed against this scenario's current state, not the baseline —
@@ -59,6 +63,13 @@ export default async function ScenarioDetailPage({
           <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             Safe-staffing flag: {breaches.length} protected or clinical position
             {breaches.length === 1 ? " was" : "s were"} touched in this scenario.
+          </div>
+        )}
+
+        {keyPersonTouched > 0 && (
+          <div className="rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+            Key-person flag: {keyPersonTouched} single-point-of-failure role{keyPersonTouched === 1 ? "" : "s"} touched in
+            this scenario — a caution, not a block. Proceeding is a deliberate call, not an oversight.
           </div>
         )}
 

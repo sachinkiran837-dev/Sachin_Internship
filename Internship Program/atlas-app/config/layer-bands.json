@@ -1,0 +1,6 @@
+{
+  "_note": "B2: an absolute reference band for management depth, same pattern as span-thresholds.json — a stated rule-of-thumb the client can read and challenge, not an external industry benchmark (that's the F1 conversation, deliberately kept separate). Peer band for a mid-size multi-directorate organisation.",
+  "healthyMin": 5,
+  "healthyMax": 6,
+  "flagAbove": 7
+}

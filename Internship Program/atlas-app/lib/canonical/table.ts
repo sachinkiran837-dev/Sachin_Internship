@@ -88,8 +88,14 @@ export interface SuppliedFields {
  *
  * On a consolidated establishment Atlas has already inserted a heading per
  * brand to hold the map together, so the brand is the nearest heading above a
- * position — not the top one, which is the group itself and would put every
- * row in the same company.
+ * position. A row that never named a brand at all — nothing in the detected
+ * column for that person — reports straight to the group node instead of any
+ * named brand heading (`buildGraph.ts`'s consolidation step), which is
+ * itself the fact that decides its brand: it belongs to the group, not to
+ * any of the group's named parts, so the group's own name (the top node's
+ * title — "Group" by default, or whatever the upload named it) is what's
+ * shown rather than a blank cell. Every synthetic node returns its own
+ * title on this walk for exactly that reason, top node included.
  */
 function brandOf(position: Position, byId: Map<string, Position>): string {
   const seen = new Set<string>();
@@ -97,12 +103,10 @@ function brandOf(position: Position, byId: Map<string, Position>): string {
 
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
+    if (current.synthetic) return current.title;
     const parent: Position | undefined = current.managerId
       ? byId.get(current.managerId)
       : undefined;
-    // A heading whose own parent is another heading is a brand; a heading
-    // with no parent is the group node above all of them.
-    if (current.synthetic && current.managerId !== null) return current.title;
     if (!parent) return "";
     current = parent;
   }

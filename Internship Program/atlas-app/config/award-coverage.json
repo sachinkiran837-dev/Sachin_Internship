@@ -1,0 +1,4 @@
+{
+  "_note": "E3's award/EBA coverage map, by classification/grade. Empty by default and deliberately so — Atlas cannot know which award or enterprise agreement covers a client's workforce without being told, and defaulting to a generic award would be exactly the silent invention the skill spec rules out. Every classification reads 'unmapped — needs confirmation' until an engagement adds its real coverage here.",
+  "coverageByGrade": {}
+}

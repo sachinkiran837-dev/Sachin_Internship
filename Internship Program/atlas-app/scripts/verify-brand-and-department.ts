@@ -201,7 +201,57 @@ async function main() {
     console.log(`   refused: ${why}`);
   }
 
-  console.log("\nverify-brand-and-department PASS");
+  /* ---------------------------------------------------------------- */
+  console.log("\n7. A row with no brand at all falls back to the group's own name");
+
+  const unbranded = [
+    { ID: "X1", Name: "X Contractor", Title: "Roaming Consultant", Manager: "", Salary: "150000" },
+    { ID: "X2", Name: "X Support", Title: "Shared Support Officer", Manager: "", Salary: "80000" },
+  ];
+  const mixed = await build([
+    csv("group-payroll.csv", [
+      ...entity("A", { Company: "Northbrook" }),
+      ...entity("B", { Company: "Calder" }),
+      ...entity("C", { Company: "Weir" }),
+      ...unbranded,
+    ]),
+  ]);
+
+  assert(
+    mixed.bound.groupBy?.column === "Company",
+    `2 blank rows among 20 is still 90% coverage — consolidation should still succeed, got ${mixed.bound.groupBy?.column ?? "nothing"}`
+  );
+  const topNode = mixed.positions.find((p) => p.synthetic && p.managerId === null);
+  assert(topNode, "expected one top group node");
+  const unbrandedPositions = mixed.positions.filter((p) => !p.synthetic && (p.rawName === "X Contractor" || p.rawName === "X Support"));
+  assert(unbrandedPositions.length === 2, `expected both unbranded rows to survive ingest, got ${unbrandedPositions.length}`);
+  assert(
+    unbrandedPositions.every((p) => p.managerId === topNode!.id),
+    "a row naming no brand should report straight to the group node, not to any named brand's heading"
+  );
+
+  const mixedTable = buildCanonicalTable(mixed.positions, {
+    fte: false,
+    status: false,
+    cost: true,
+    department: false,
+    manager: true,
+  });
+  const unbrandedRows = mixedTable.rows.filter((r) => r.employee === "X Contractor" || r.employee === "X Support");
+  assert(unbrandedRows.length === 2, `expected both unbranded rows in the canonical table, got ${unbrandedRows.length}`);
+  assert(
+    unbrandedRows.every((r) => r.brand === topNode!.title),
+    `expected the group's own name ("${topNode!.title}") as the fallback brand, got ${unbrandedRows.map((r) => r.brand).join(", ")}`
+  );
+  const namedBrandRows = mixedTable.rows.filter((r) => r.employee !== "X Contractor" && r.employee !== "X Support");
+  assert(
+    namedBrandRows.every((r) => r.brand !== topNode!.title && r.brand !== ""),
+    "rows that did name a brand must keep their own brand, never fall back to the group's name"
+  );
+  console.log(`   2 rows named no company → tagged "${topNode!.title}" (the group's own name), not left blank`);
+  console.log(`   the other 18 keep their real brand, never overwritten by the fallback\n`);
+
+  console.log("verify-brand-and-department PASS");
 }
 
 main().catch((err) => {

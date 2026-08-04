@@ -114,10 +114,6 @@ export default async function OrgConfirmPage({
           </Link>
         </div>
 
-        {/* Before anything else on this screen, because everything else on it
-            is downstream of these. */}
-        <IngestNotes orgId={orgId} notes={notes} canReread={canReread} />
-
         {conversions.length > 0 && (
           <div className="rounded-md border border-primary/30 bg-accent/40 px-4 py-3">
             <p className="eyebrow mb-2">
@@ -235,6 +231,12 @@ export default async function OrgConfirmPage({
             </CardContent>
           </Card>
         )}
+
+        {/* After every kind of thing Atlas flags on this screen — conversions,
+            the plan, the source-file report, the structure check, coverage,
+            and the issues card just above — so a correction can react to the
+            full picture rather than to the top of the page alone. */}
+        <IngestNotes orgId={orgId} notes={notes} canReread={canReread} />
 
         <Card>
           <CardHeader>

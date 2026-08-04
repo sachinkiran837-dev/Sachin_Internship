@@ -56,6 +56,10 @@ function toPosition(row: typeof positions.$inferSelect): Position {
     // before, so an old map keeps working rather than grouping everyone under
     // an empty string.
     functionGroup: row.functionGroup ?? row.department,
+    site: row.site,
+    grade: row.grade,
+    startDate: row.startDate,
+    vacantSince: row.vacantSince,
     managerId: row.managerId,
     cost: row.cost,
     fte: row.fte,
@@ -111,6 +115,10 @@ export async function savePositions(rows: Position[]): Promise<void> {
     title: p.title,
     department: p.department,
     functionGroup: p.functionGroup,
+    site: p.site,
+    grade: p.grade,
+    startDate: p.startDate,
+    vacantSince: p.vacantSince,
     managerId: p.managerId,
     cost: p.cost,
     fte: p.fte,

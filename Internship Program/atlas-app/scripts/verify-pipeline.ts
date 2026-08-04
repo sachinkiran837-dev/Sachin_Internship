@@ -82,8 +82,14 @@ async function main() {
   assert(protectedNodes.length >= 3, `expected several protected roles, got ${protectedNodes.length}`);
   console.log(`   layers computed, ${protectedNodes.length} protected roles tagged: ${protectedNodes.map((n) => n.title).join(", ")}`);
 
+  // A2 (Phase 1): all 10 of this manager's reports carry clinicalFlag (the
+  // "patient" keyword), so this is now correctly read as a roster lead
+  // staffing a patient-facing service, not a management span — the exact
+  // miscount the B1 skill spec names (a 30-report Nurse Unit Manager wrongly
+  // flagged "wide"), here at a smaller scale and a non-nursing roster.
   const patientServicesManager = tagged.find((n) => n.title === "Patient Services Manager")!;
-  assert(patientServicesManager.flags.spanHealth === "wide", "Patient Services Manager should be flagged wide span (10 reports)");
+  assert(patientServicesManager.flags.unitRoster, "Patient Services Manager should be recognised as a roster lead (10 predominantly clinical-flagged reports)");
+  assert(patientServicesManager.flags.spanHealth === "healthy", "a roster lead must not be flagged thin/wide");
   const clinicalCoordinator = tagged.find((n) => n.title === "Clinical Coordinator")!;
   assert(clinicalCoordinator.flags.singleReport, "Clinical Coordinator should be flagged single-report");
   console.log("   wide-span and single-report tagging confirmed against known seed shape");
