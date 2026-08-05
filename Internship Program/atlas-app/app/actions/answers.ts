@@ -116,7 +116,14 @@ export async function answerIngestAction(
 
     if ("error" in result) return { error: result.error, ok: false };
 
-    revalidatePath(`/org/${orgId}`);
+    // A re-read can be triggered from the confirm screen, the canonical
+    // table or the establishment map now, and it changes what every one of
+    // them (plus findings and scenarios, which are cleared) would show — so
+    // whichever screen the client is looking at reflects it without a full
+    // reload.
+    for (const path of ["", "/data", "/map", "/findings", "/scenarios", "/ask"]) {
+      revalidatePath(`/org/${orgId}${path}`);
+    }
     return { error: null, ok: true };
   } catch (err) {
     return { error: `Re-reading the files failed: ${(err as Error).message}`, ok: false };

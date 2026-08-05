@@ -40,7 +40,6 @@ export function UploadForm() {
   const [anonymize, setAnonymize] = useState(true);
   const [selected, setSelected] = useState<File[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [context, setContext] = useState("");
   const [dragging, setDragging] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -95,7 +94,6 @@ export function UploadForm() {
       const data = new FormData();
       data.set("useSample", "off");
       data.set("anonymize", anonymize ? "on" : "off");
-      data.set("context", context);
       for (const id of ids) data.append("uploadId", id);
 
       startSubmit(() => formAction(data));
@@ -300,23 +298,6 @@ export function UploadForm() {
               {unsupported.length === 1 ? "it" : "them"} to continue.
             </p>
           )}
-
-          {/* The one thing the files themselves can never say: what they are
-              to each other. A column list cannot tell Atlas that three brands
-              share one export, or that the chart is the source of truth for
-              reporting lines and the spreadsheet only for money. */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="context">Anything Atlas should know about these files?</Label>
-            <textarea
-              id="context"
-              name="context"
-              rows={3}
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="Optional. e.g. Consolidate at brand level. The structure is in the PDF; the spreadsheet is payroll only. Exclude leavers."
-              className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            />
-          </div>
 
           <input
             ref={inputRef}

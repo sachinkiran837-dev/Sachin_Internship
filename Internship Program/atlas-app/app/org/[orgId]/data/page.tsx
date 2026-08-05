@@ -2,9 +2,10 @@ import { currency } from "@/lib/format/currency";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { getCleaningLedger, getOrg } from "@/db/repo";
+import { getCleaningLedger, getOrg, hasSourceBlobs } from "@/db/repo";
 import { loadCanonicalTable } from "@/lib/canonical/load";
 import { OrgNav } from "@/components/OrgNav";
+import { ContextRedo } from "@/components/ingest/ContextRedo";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -47,6 +48,7 @@ export default async function CanonicalDataPage({
   const table = await loadCanonicalTable(orgId);
   const ledger = await getCleaningLedger(orgId);
   const removed = ledger.rowsIn - ledger.rowsOut;
+  const canReread = await hasSourceBlobs(orgId);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -84,6 +86,14 @@ export default async function CanonicalDataPage({
             ? `Showing the first ${PREVIEW_ROWS.toLocaleString()}; the CSV holds all ${table.rows.length.toLocaleString()}.`
             : "The CSV holds the same rows."}
         </p>
+
+        <ContextRedo
+          orgId={orgId}
+          canReread={canReread}
+          heading="Tell Atlas how to read this data"
+          placeholder="e.g. Treat the 'Division' column as the department, not 'Grp3'. The cost centre codes in column F actually mean the brand."
+          buttonLabel="Redo the dataset"
+        />
 
         <div className="overflow-x-auto rounded-md border">
           <Table>

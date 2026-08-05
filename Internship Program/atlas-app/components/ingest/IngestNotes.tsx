@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { AlertTriangle, Check, RefreshCw } from "lucide-react";
+import { useActionState, useState } from "react";
+import { AlertTriangle, Check, ChevronDown, RefreshCw } from "lucide-react";
 import { answerIngestAction, type AnswerActionState } from "@/app/actions/answers";
 import type { IngestNote } from "@/lib/ingest/notes";
 import { Badge } from "@/components/ui/badge";
@@ -11,15 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * Everything Atlas assumed and everything it refused to assume, on the last
- * screen before the map.
+ * The issues on the confirm screen that only the client can settle, and one
+ * box to answer all of them at once.
  *
- * The position of this panel is the point of it. Once someone has seen a map,
- * the numbers on it are facts; before they have, the numbers are still a
- * reading of a spreadsheet that someone can correct. So the register sits
- * between the two, and the questions come first — a question is a hole the
- * client is the only one who can fill, and an assumption is settled unless
- * they disagree with it.
+ * This panel shows only what Atlas would not guess — questions, never the
+ * readings it already made with confidence. An assumption is settled unless
+ * something else on this screen contradicts it, so listing it here would be
+ * showing data, not an issue to act on.
  *
  * Answers go back through a full re-read of the original files rather than a
  * patch, so nothing on the following screens can end up describing a version
@@ -40,31 +38,21 @@ export function IngestNotes({
 }) {
   const [state, formAction, pending] = useActionState(answerIngestAction, INITIAL);
 
-  if (notes.length === 0) return null;
-
   const questions = notes.filter((n) => n.kind === "question");
-  const assumptions = notes.filter((n) => n.kind === "assumption");
 
   return (
     <Card className={questions.length > 0 ? "border-amber-500/40" : undefined}>
       <CardHeader>
-        <CardTitle>What Atlas assumed, and what it needs you to settle</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {questions.length > 0 ? (
-            <>
-              {questions.length} thing{questions.length === 1 ? "" : "s"} could not be read off your
-              files, and Atlas has left {questions.length === 1 ? "it" : "them"} open rather than
-              pick a number
-              {assumptions.length > 0 && `. ${assumptions.length} reading${assumptions.length === 1 ? " was" : "s were"} made and applied`}
-              . Everything below is in the figures on the next screens.
-            </>
-          ) : (
-            <>
-              Atlas made {assumptions.length} reading{assumptions.length === 1 ? "" : "s"} your
-              files did not state outright. Each one is in the figures on the next screens.
-            </>
-          )}
-        </p>
+        <CardTitle>
+          {questions.length > 0 ? "What Atlas needs you to settle" : "Tell Atlas what to do about this"}
+        </CardTitle>
+        {questions.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {questions.length} thing{questions.length === 1 ? "" : "s"} could not be read off your
+            files, and Atlas has left {questions.length === 1 ? "it" : "them"} open rather than
+            pick a number.
+          </p>
+        )}
       </CardHeader>
 
       <form action={formAction}>
@@ -78,37 +66,18 @@ export function IngestNotes({
                 <span className="text-sm font-medium">Open — Atlas would not guess these</span>
               </div>
               {questions.map((n) => (
-                <NoteBody key={n.id} note={n} tone="question" />
-              ))}
-            </section>
-          )}
-
-          {assumptions.length > 0 && (
-            <section className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{assumptions.length}</Badge>
-                <span className="text-sm font-medium">Applied — correct any of these and Atlas will read the files again</span>
-              </div>
-              {assumptions.map((n) => (
-                <NoteBody key={n.id} note={n} tone="assumption" />
+                <NoteBody key={n.id} note={n} />
               ))}
             </section>
           )}
 
           <div className="flex flex-col gap-2 border-t pt-4">
             <Label htmlFor="extraContext" className="text-sm font-medium">
-              Anything else Atlas has read wrong — or should know about the business?
+              What should Atlas do about this?
             </Label>
             <p className="text-xs text-muted-foreground">
-              Describe it however you like — which file is really the structure, what a column
-              actually means, that one file&rsquo;s brand codes are another file&rsquo;s full names, that a
-              full-time week here is 38 hours, which rows aren&rsquo;t in scope. This is also where
-              business context goes — what the organisation does, roughly what it earns, anything
-              you already believe about it Atlas should test against the numbers. Atlas reads this
-              two ways: against your files, together with everything on this screen, and against
-              the establishment itself for the facts underneath the findings. Whatever it changes
-              is shown back here, and anything it can&rsquo;t support is listed as asked for and not
-              done.
+              Answer the questions above, correct a wrong reading, or add business context —
+              whatever changes is shown back here.
             </p>
             <textarea
               id="extraContext"
@@ -154,19 +123,13 @@ export function IngestNotes({
   );
 }
 
-function NoteBody({ note, tone }: { note: IngestNote; tone: "question" | "assumption" }) {
+function NoteBody({ note }: { note: IngestNote }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <div
-      className={`rounded-md border px-4 py-3 ${
-        tone === "question" ? "border-amber-500/40 bg-amber-500/5" : "bg-accent/20"
-      }`}
-    >
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-3">
       <div className="mb-1 flex items-center gap-2">
-        {tone === "question" ? (
-          <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden />
-        ) : (
-          <Check className="size-4 shrink-0 text-primary" aria-hidden />
-        )}
+        <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden />
         <span className="text-sm font-medium">{note.topic}</span>
         {note.answeredWith && (
           <Badge variant="outline" className="ml-auto">
@@ -176,12 +139,28 @@ function NoteBody({ note, tone }: { note: IngestNote; tone: "question" | "assump
       </div>
 
       <p className="text-sm">{note.statement}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{note.evidence}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{note.effect}</p>
 
-      {note.answerKind === "hours" && <HoursAnswer />}
-      {note.answerKind === "mapping" && <MappingAnswer note={note} />}
-      {note.answerKind === "column" && <ColumnAnswer note={note} />}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="mt-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+        {open ? "Hide" : "Show"} why
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          <p className="text-sm text-muted-foreground">{note.evidence}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{note.effect}</p>
+        </div>
+      )}
+
+      <div className="mt-2">
+        {note.answerKind === "hours" && <HoursAnswer />}
+        {note.answerKind === "mapping" && <MappingAnswer note={note} />}
+        {note.answerKind === "column" && <ColumnAnswer note={note} />}
+      </div>
     </div>
   );
 }

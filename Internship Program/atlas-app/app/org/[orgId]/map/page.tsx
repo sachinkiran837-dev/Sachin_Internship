@@ -1,5 +1,11 @@
 import { notFound } from "next/navigation";
-import { getActiveScenario, getBaselinePositions, getBaselineRootId, getOrg } from "@/db/repo";
+import {
+  getActiveScenario,
+  getBaselinePositions,
+  getBaselineRootId,
+  getOrg,
+  hasSourceBlobs,
+} from "@/db/repo";
 import { computeMetrics } from "@/lib/metrics/diagnostics";
 import { buildCanonicalTable } from "@/lib/canonical/table";
 import { canonicalOptions } from "@/lib/canonical/load";
@@ -9,6 +15,7 @@ import type { Position } from "@/lib/graph/types";
 import { OrgNav } from "@/components/OrgNav";
 import { EstablishmentMap } from "@/components/map/EstablishmentMap";
 import { MapStats } from "@/components/map/MapStats";
+import { ContextRedo } from "@/components/ingest/ContextRedo";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +37,21 @@ export default async function MapPage({ params }: { params: Promise<{ orgId: str
   const options = await canonicalOptions(orgId);
   const table = buildCanonicalTable(positions, options.supplied, options.brandLabel);
   const facets = buildFacets(table, countFlags(positions, rootId));
+  const canReread = await hasSourceBlobs(orgId);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <OrgNav orgId={orgId} active="map" />
       <MapStats metrics={metrics} />
+      <div className="border-b px-4 py-2">
+        <ContextRedo
+          orgId={orgId}
+          canReread={canReread}
+          heading="Tell Atlas how to read this establishment"
+          placeholder="e.g. The dotted lines on our chart are dotted-line reporting, not the primary manager. Ignore the three roles marked 'leaver' in the title."
+          buttonLabel="Rework the map"
+        />
+      </div>
       <EstablishmentMap
         key={version}
         orgId={orgId}

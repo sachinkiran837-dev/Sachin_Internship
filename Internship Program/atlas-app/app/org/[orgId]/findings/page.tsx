@@ -16,6 +16,7 @@ import type { DiagnosticMetrics } from "@/lib/graph/types";
 import { OrgNav } from "@/components/OrgNav";
 import { HypothesisCard } from "@/components/hypothesis/HypothesisCard";
 import { FunctionTable } from "@/components/analysis/FunctionTable";
+import { RefreshFindingsButton } from "@/components/findings/RefreshFindingsButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -59,20 +60,23 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
     <div className="flex flex-1 flex-col">
       <OrgNav orgId={orgId} active="findings" />
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-8">
-        <div>
-          <p className="eyebrow">
-            <span className="eyebrow-dot" aria-hidden />
-            Findings {scenario ? `— ${scenario.name}` : "— baseline"}
-          </p>
-          <h1 className="mt-1 text-2xl">What we think is happening here</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Every hypothesis below carries the same three parts: what the data suggests is
-            happening, what to do about it, and what you get if you do. Almost every comparison is
-            against this organisation&rsquo;s own median unit, so the figure can be checked against
-            the table further down this page — the handful marked &ldquo;External reference&rdquo; or
-            &ldquo;Back-office benchmarks&rdquo; read outward against a stated peer band instead, and
-            say so plainly.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="eyebrow">
+              <span className="eyebrow-dot" aria-hidden />
+              Findings {scenario ? `— ${scenario.name}` : "— baseline"}
+            </p>
+            <h1 className="mt-1 text-2xl">What we think is happening here</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Every hypothesis below carries the same three parts: what the data suggests is
+              happening, what to do about it, and what you get if you do. Almost every comparison
+              is against this organisation&rsquo;s own median unit, so the figure can be checked
+              against the table further down this page — the handful marked &ldquo;External
+              reference&rdquo; or &ldquo;Back-office benchmarks&rdquo; read outward against a stated
+              peer band instead, and say so plainly.
+            </p>
+          </div>
+          <RefreshFindingsButton />
         </div>
 
         <Card>
@@ -96,11 +100,11 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
               Atlas is working from your files alone. Tell it what the business earns, what
               you&rsquo;re trying to reach and what you already suspect, and it will rank functions
               on revenue per head, measure every play against your target, and test each suspicion
-              against the establishment. It is asked for on the{" "}
-              <Link href="/" className="font-medium underline underline-offset-4">
-                upload screen
+              against the establishment. Give it in the context box on the{" "}
+              <Link href={`/org/${orgId}`} className="font-medium underline underline-offset-4">
+                confirm screen
               </Link>
-              , above the file picker.
+              , then come back and refresh.
             </p>
           </div>
         )}
@@ -162,8 +166,9 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
                 ))}
               </ul>
               <p className="mt-1 text-xs text-muted-foreground">
-                All of this is asked for on the upload screen. Supplying it means re-reading the
-                files with it in hand.
+                All of this can be given in the context box on the confirm, canonical table or
+                establishment map screens. Supplying it means re-reading the files with it in
+                hand — refresh this page afterwards to see it applied.
               </p>
             </CardContent>
           </Card>
