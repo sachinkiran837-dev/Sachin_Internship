@@ -64,13 +64,19 @@ function buildFindings(metrics: DiagnosticMetrics): Finding[] {
   return findings.slice(0, MAX_FINDINGS);
 }
 
+/**
+ * The lead fact plus a one-line pointer to the headlines below it — never
+ * the full account. `findings[].soWhat` is a paragraph in its own right, and
+ * concatenating all of them here is what used to turn the summary into the
+ * longest reading on the page; the detail already has a place, further down.
+ */
 function fallbackNarrative(metrics: DiagnosticMetrics, findings: Finding[]): string {
   if (findings.length === 0) {
     return "Nothing notable to report against the current thresholds — this structure sits within the healthy span and layer ranges configured for this review.";
   }
   const lead = `This structure carries ${metrics.headcount} positions across ${metrics.layers} layers, at ${currency(metrics.totalCost)} in fully-loaded cost.`;
-  const body = findings.map((f) => `${f.headline}: ${f.soWhat}`).join(" ");
-  return `${lead} ${body}`;
+  const headlines = findings.slice(0, 3).map((f) => f.headline.toLowerCase());
+  return `${lead} Also flagged: ${headlines.join("; ")}.`;
 }
 
 /**
@@ -139,7 +145,7 @@ export async function generateNarrative(
 
   try {
     const answer = await ask({
-      maxTokens: 400,
+      maxTokens: 160,
       timeoutMs: NARRATIVE_TIMEOUT_MS,
       prompt:
         `You are writing a short narrative for a Project Partner to read out to a client, framing ` +
@@ -154,9 +160,11 @@ export async function generateNarrative(
           averageSpan: metrics.averageSpan,
           protectedCount: metrics.protectedCount,
         })}\n\n${material}\n\n` +
-        `Write 2-4 sentences, plain language, no bullet points. Lead with what the analysis thinks ` +
-        `is happening rather than with a count of positions. Where a client belief was tested and ` +
-        `not supported, say so — that is the most useful sentence on the page.`,
+        `Write exactly 2-3 short sentences — no more than 3-4 lines read aloud, and no bullet ` +
+        `points. Lead with what the analysis thinks is happening rather than with a count of ` +
+        `positions. Where a client belief was tested and not supported, say so — that is the most ` +
+        `useful sentence on the page. The detail behind every figure is already shown further down ` +
+        `this page, so this is the headline, not the account.`,
     });
 
     return { narrative: answer.text || fallback, findings, followups, source: "ai" };

@@ -54,7 +54,6 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
 
   const tested = hypotheses.filter((h) => h.verdict !== null);
   const found = hypotheses.filter((h) => h.verdict === null && h.strength !== "needs-input");
-  const gaps = hypotheses.filter((h) => h.strength === "needs-input");
 
   return (
     <div className="flex flex-1 flex-col">
@@ -67,14 +66,6 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
               Findings {scenario ? `— ${scenario.name}` : "— baseline"}
             </p>
             <h1 className="mt-1 text-2xl">What we think is happening here</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Every hypothesis below carries the same three parts: what the data suggests is
-              happening, what to do about it, and what you get if you do. Almost every comparison
-              is against this organisation&rsquo;s own median unit, so the figure can be checked
-              against the table further down this page — the handful marked &ldquo;External
-              reference&rdquo; or &ldquo;Back-office benchmarks&rdquo; read outward against a stated
-              peer band instead, and say so plainly.
-            </p>
           </div>
           <RefreshFindingsButton />
         </div>
@@ -89,6 +80,26 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
             </Suspense>
           </CardContent>
         </Card>
+
+        {found.length > 0 ? (
+          <Section
+            title={`What the data suggests (${found.length})`}
+            blurb={method}
+          >
+            {found.map((h) => (
+              <HypothesisCard key={h.id} orgId={orgId} hypothesis={h} />
+            ))}
+          </Section>
+        ) : (
+          <Card>
+            <CardContent className="pt-6 text-sm text-muted-foreground">
+              Nothing in this establishment sits far enough outside its own norms to raise as a
+              hypothesis. {analysis.primary.limitation ?? ""}
+            </CardContent>
+          </Card>
+        )}
+
+        <FunctionTable comparison={analysis.primary} choice={analysis.choice} />
 
         {!hasBusinessContext(business) && (
           <div className="rounded-lg border border-primary/30 bg-accent/30 px-4 py-3">
@@ -115,37 +126,6 @@ export default async function FindingsPage({ params }: { params: Promise<{ orgId
             blurb="Your own hypotheses, put against the establishment. An unsupported one is the most valuable result on this page — it stops a redesign being built on it."
           >
             {tested.map((h) => (
-              <HypothesisCard key={h.id} orgId={orgId} hypothesis={h} />
-            ))}
-          </Section>
-        )}
-
-        {found.length > 0 ? (
-          <Section
-            title={`What the data suggests (${found.length})`}
-            blurb={method}
-          >
-            {found.map((h) => (
-              <HypothesisCard key={h.id} orgId={orgId} hypothesis={h} />
-            ))}
-          </Section>
-        ) : (
-          <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">
-              Nothing in this establishment sits far enough outside its own norms to raise as a
-              hypothesis. {analysis.primary.limitation ?? ""}
-            </CardContent>
-          </Card>
-        )}
-
-        <FunctionTable comparison={analysis.primary} choice={analysis.choice} />
-
-        {gaps.length > 0 && (
-          <Section
-            title="What Atlas will not guess"
-            blurb="Real questions Atlas can see the shape of but cannot size from an establishment file alone."
-          >
-            {gaps.map((h) => (
               <HypothesisCard key={h.id} orgId={orgId} hypothesis={h} />
             ))}
           </Section>
