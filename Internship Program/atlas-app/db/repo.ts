@@ -23,6 +23,7 @@ import {
   EMPTY_VERIFICATION,
   type StructureVerification,
 } from "@/lib/ingest/verifyStructure";
+import { EMPTY_GROUNDING, type CanonicalGrounding } from "@/lib/orchestrator/verify";
 
 /**
  * Rows per INSERT statement. The neon-http driver makes one HTTP round trip
@@ -305,6 +306,28 @@ export async function saveStructureVerification(
   await db
     .update(orgs)
     .set({ structureQcJson: JSON.stringify(verification) })
+    .where(eq(orgs.id, orgId));
+}
+
+/** Sampled canonical-table cells (title, cost, FTE), checked against the rows ingest actually read. */
+export async function getCanonicalGrounding(orgId: string): Promise<CanonicalGrounding> {
+  const rows = await db.select().from(orgs).where(eq(orgs.id, orgId));
+  const raw = rows[0]?.canonicalQcJson;
+  if (!raw) return EMPTY_GROUNDING;
+  try {
+    return JSON.parse(raw) as CanonicalGrounding;
+  } catch {
+    return EMPTY_GROUNDING;
+  }
+}
+
+export async function saveCanonicalGrounding(
+  orgId: string,
+  grounding: CanonicalGrounding
+): Promise<void> {
+  await db
+    .update(orgs)
+    .set({ canonicalQcJson: JSON.stringify(grounding) })
     .where(eq(orgs.id, orgId));
 }
 

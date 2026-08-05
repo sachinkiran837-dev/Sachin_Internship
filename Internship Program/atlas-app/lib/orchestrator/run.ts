@@ -13,6 +13,7 @@ import { buildPeerBenchmark, type PeerBenchmarkResult } from "@/lib/analysis/pee
 import { buildHypotheses, type Hypothesis } from "@/lib/hypothesis/build";
 import { EMPTY_BUSINESS, type BusinessContext } from "@/lib/hypothesis/context";
 import type { DiagnosticMetrics, IngestIssue, Position } from "@/lib/graph/types";
+import { checkInvariants } from "./verify";
 
 /**
  * The analytical bundle runner: B through G, in the order
@@ -40,7 +41,7 @@ import type { DiagnosticMetrics, IngestIssue, Position } from "@/lib/graph/types
 
 export interface OrchestratorLogEntry {
   worker: string;
-  status: "computed" | "skipped";
+  status: "computed" | "skipped" | "failed_invariant";
   reason?: string;
 }
 
@@ -144,7 +145,7 @@ export function runAnalyticalBundle(
   const { hypotheses } = buildHypotheses(positions, rootId, business, issues);
   log.push({ worker: "G", status: "computed" });
 
-  return {
+  const bundle: AnalyticalBundle = {
     metrics,
     analysis,
     footprint,
@@ -160,4 +161,16 @@ export function runAnalyticalBundle(
     hypotheses,
     log,
   };
+
+  // The orchestrator's own QC pass: every check here is a live version of an
+  // assertion a verify-*.ts script already runs against fixtures — this is
+  // the first time any of them run against a real establishment's real
+  // output. A failure here is a code defect, not noise a retry would fix
+  // (same positions in, same wrong number out, always) — so it's reported
+  // into the log exactly like a skip, never silently swallowed.
+  for (const result of checkInvariants(bundle)) {
+    if (!result.ok) log.push({ worker: result.worker, status: "failed_invariant", reason: result.detail });
+  }
+
+  return bundle;
 }

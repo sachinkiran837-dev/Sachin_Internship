@@ -112,16 +112,11 @@ const EDGES: Edge[] = [
   },
   { file: "lib/scenario/phasing.ts", requires: ["@/lib/scenario/impact", "@/lib/analysis/irEbaOverlay"] },
 
-  // Layer 6 — I1/I2 fan in from G; I3 (Ask Atlas) deliberately does not.
-  {
-    file: "lib/report/boardPack.ts",
-    requires: ["@/lib/scenario/reconcile", "@/lib/analysis/peerBenchmark", "@/lib/scenario/phasing"],
-  },
-  { file: "lib/hypothesis/briefing.ts", requires: ["@/lib/scenario/reconcile"] },
+  // Layer 6 — I3 (Ask Atlas) deliberately does not fan in from G.
   {
     file: "lib/ask/interpret.ts",
     requires: ["@/lib/metrics/diagnostics", "@/lib/analysis/keyPersonRisk", "@/lib/scenario/patterns"],
-    forbids: ["@/lib/hypothesis/build", "@/lib/scenario/reconcile", "@/lib/report/boardPack"],
+    forbids: ["@/lib/hypothesis/build", "@/lib/scenario/reconcile"],
   },
 ];
 

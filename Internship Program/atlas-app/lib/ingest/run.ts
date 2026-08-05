@@ -11,6 +11,7 @@ import type { Position } from "@/lib/graph/types";
 import { unitNames } from "@/lib/analysis/functions";
 import { cleanRows, cleaningNote } from "@/lib/canonical/clean";
 import { verifyStructureAgainstMap, verificationNote } from "./verifyStructure";
+import { checkCanonicalGrounding, canonicalGroundingNote } from "@/lib/orchestrator/verify";
 import { readBusinessContext } from "@/lib/hypothesis/read";
 import { EMPTY_BUSINESS } from "@/lib/hypothesis/context";
 import {
@@ -19,6 +20,7 @@ import {
   getBaselineRootId,
   saveAnswers,
   saveBusinessContext,
+  saveCanonicalGrounding,
   saveCleaningLedger,
   saveIssues,
   saveNotes,
@@ -217,6 +219,12 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   );
   await saveStructureVerification(orgId, verification);
 
+  // The same idea, for cell values instead of reporting lines: a sample of
+  // canonical-table rows (every one already flagged low-confidence, plus a
+  // random fill) checked back against the rows ingest actually read.
+  const grounding = checkCanonicalGrounding(positions, bound.rows, issues);
+  await saveCanonicalGrounding(orgId, grounding);
+
   // The hypothesis layer, read against the establishment that now exists.
   // Nothing in it touches the map or the positions — it decides what the
   // findings can say, which is why it is read here and applied later.
@@ -240,6 +248,8 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
   if (scrubbed) notes.push(scrubbed);
   const qc = verificationNote(verification);
   if (qc) notes.push(qc);
+  const groundingQc = canonicalGroundingNote(grounding);
+  if (groundingQc) notes.push(groundingQc);
   const merged = appliedMapping(bound, answers, revised !== null);
   if (merged) notes.push(merged);
   const vocabulary = await reconcileGroups(bound, answers);

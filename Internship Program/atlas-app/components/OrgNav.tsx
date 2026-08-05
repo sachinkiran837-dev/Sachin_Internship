@@ -7,8 +7,6 @@ export function OrgNav({ orgId, active }: { orgId: string; active: string }) {
     { key: "map", label: "Establishment map", href: `/org/${orgId}/map` },
     { key: "findings", label: "Findings", href: `/org/${orgId}/findings` },
     { key: "scenarios", label: "Scenarios", href: `/org/${orgId}/scenarios` },
-    { key: "board-pack", label: "Board pack", href: `/org/${orgId}/board-pack` },
-    { key: "consultant-briefing", label: "Consultant briefing", href: `/org/${orgId}/consultant-briefing` },
     { key: "ask", label: "Ask Atlas", href: `/org/${orgId}/ask` },
   ];
 

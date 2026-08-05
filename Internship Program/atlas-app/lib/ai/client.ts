@@ -101,12 +101,11 @@ export function aiModel(): string {
  *     (`guardrails.ts` still gates it, same as a typed move).
  *   - Findings narrative (I): `lib/findings/generate.ts` — pre-existing.
  *
- * Deliberately absent: G1's causal stories/questions/falsifiers, I1's
- * board-pack judgment sentence, I2's pushback — all narrative *generation*,
- * kept as deterministic templates so a sentence can never say something the
- * evidence block doesn't support. Every touchpoint above is a *read*: text
- * in, a choice among a small fixed set of already-existing engine calls out.
- * That distinction, not a headcount, is the actual rule.
+ * Deliberately absent: G1's causal stories/questions/falsifiers — narrative
+ * *generation*, kept as deterministic templates so a sentence can never say
+ * something the evidence block doesn't support. Every touchpoint above is a
+ * *read*: text in, a choice among a small fixed set of already-existing
+ * engine calls out. That distinction, not a headcount, is the actual rule.
  */
 export type AiTier = "low" | "medium" | "high";
 

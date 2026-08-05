@@ -78,6 +78,13 @@
       "when": 1785749809681,
       "tag": "0010_grade_tenure_vacancy_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785918031884,
+      "tag": "0011_white_wild_pack",
+      "breakpoints": true
     }
   ]
 }

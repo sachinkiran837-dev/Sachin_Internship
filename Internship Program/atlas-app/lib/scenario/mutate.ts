@@ -14,7 +14,8 @@ import {
 import { add, flatten, merge, reassign, rebase, remove, type MoveOutcome } from "./moves";
 import { parseScenarioText, type ParsedMove } from "./moveParser";
 import { analysePlay, getPlay } from "./plays";
-import { ask, hasAI, type AiTool } from "@/lib/ai/client";
+import { hasAI, type AiTool } from "@/lib/ai/client";
+import { askWithRetry } from "@/lib/orchestrator/verify";
 
 const DEFAULT_WHO = "Project Partner (local session)";
 
@@ -153,55 +154,56 @@ const PICK_MOVE: AiTool = {
  * typed one.
  */
 async function askModelForMove(rawText: string): Promise<ParsedMove | null> {
-  if (!hasAI()) return null;
-  try {
-    const result = await ask({
-      tier: "medium",
+  // Escalates from medium to high on a second attempt — a real second
+  // opinion, not just a retry, since the ceiling tier hasn't been tried yet.
+  // A failed or unreachable call after both falls back to the deterministic
+  // rejection below — visible-fallback, same as everywhere else a model call
+  // backs an engine decision.
+  const result = await askWithRetry(
+    (tier) => ({
+      tier,
       maxTokens: 300,
       timeoutMs: 15000,
       system:
         "You read a scenario instruction about an org chart into a structured move. You never decide whether the move should happen — only what it says.",
       prompt: rawText,
       tool: PICK_MOVE,
-    });
-    if (result.truncated || !result.toolInput) return null;
-    const input = result.toolInput as Record<string, unknown>;
-    const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+    }),
+    ["medium", "high"]
+  );
+  if (!result) return null;
+  const input = result.toolInput as Record<string, unknown>;
+  const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
 
-    switch (input.kind) {
-      case "flatten": {
-        const subject = str("subject");
-        const layers = Number(input.layers);
-        return subject && Number.isFinite(layers) ? { kind: "flatten", subject, layers } : null;
-      }
-      case "merge": {
-        const from = str("from");
-        const into = str("into");
-        return from && into ? { kind: "merge", from, into } : null;
-      }
-      case "remove": {
-        const target = str("target");
-        return target ? { kind: "remove", target } : null;
-      }
-      case "reassign": {
-        const target = str("target");
-        const newManager = str("newManager");
-        return target && newManager ? { kind: "reassign", target, newManager } : null;
-      }
-      case "add": {
-        const title = str("title");
-        const department = str("department");
-        if (!title || !department) return null;
-        const cost = Number(input.cost);
-        return { kind: "add", title, department, managerNeedle: department, cost: Number.isFinite(cost) ? cost : 0 };
-      }
-      default:
-        return null;
+  switch (input.kind) {
+    case "flatten": {
+      const subject = str("subject");
+      const layers = Number(input.layers);
+      return subject && Number.isFinite(layers) ? { kind: "flatten", subject, layers } : null;
     }
-  } catch {
-    // Falls back to the deterministic rejection below — visible-fallback,
-    // same as everywhere else a model call backs an engine decision.
-    return null;
+    case "merge": {
+      const from = str("from");
+      const into = str("into");
+      return from && into ? { kind: "merge", from, into } : null;
+    }
+    case "remove": {
+      const target = str("target");
+      return target ? { kind: "remove", target } : null;
+    }
+    case "reassign": {
+      const target = str("target");
+      const newManager = str("newManager");
+      return target && newManager ? { kind: "reassign", target, newManager } : null;
+    }
+    case "add": {
+      const title = str("title");
+      const department = str("department");
+      if (!title || !department) return null;
+      const cost = Number(input.cost);
+      return { kind: "add", title, department, managerNeedle: department, cost: Number.isFinite(cost) ? cost : 0 };
+    }
+    default:
+      return null;
   }
 }
 

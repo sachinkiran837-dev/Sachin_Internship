@@ -45,6 +45,17 @@ export const orgs = pgTable("orgs", {
    * this from the saved establishment would mean re-running the whole ingest.
    */
   structureQcJson: text("structure_qc_json"),
+  /**
+   * JSON CanonicalGrounding — a sample of canonical-table cells (title, cost,
+   * FTE) spot-checked against the rows ingest actually read, the same
+   * generalisation of the structure check above but for cell values instead
+   * of reporting lines.
+   *
+   * Stored for the same reason: the rows ingest read only exist in memory
+   * during binding, and reproducing this from the saved positions would mean
+   * re-running the whole ingest.
+   */
+  canonicalQcJson: text("canonical_qc_json"),
   /** How many times this establishment has been re-read with new answers. */
   revision: integer("revision").notNull().default(0),
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "orgs" ADD COLUMN "canonical_qc_json" text;

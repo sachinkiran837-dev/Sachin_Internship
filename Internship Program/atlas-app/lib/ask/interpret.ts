@@ -11,7 +11,8 @@ import { tagNodes } from "@/lib/graph/tagging";
 import { parseScenarioText } from "@/lib/scenario/moveParser";
 import { patternForParsedMove, rejectWithNearestPattern, patternMeta } from "@/lib/scenario/patterns";
 import { EMPTY_BUSINESS, type BusinessContext } from "@/lib/hypothesis/context";
-import { ask, hasAI, type AiTool } from "@/lib/ai/client";
+import { hasAI, type AiTool } from "@/lib/ai/client";
+import { askWithRetry } from "@/lib/orchestrator/verify";
 import type { Position } from "@/lib/graph/types";
 
 /**
@@ -256,28 +257,29 @@ const PICK_TOOL: AiTool = {
  * naming a tool that doesn't already exist in `TOOLS`.
  */
 async function askModelForTool(query: string): Promise<ToolId | null> {
-  if (!hasAI()) return null;
-  try {
-    const result = await ask({
-      tier: "high",
+  // Already at the top tier, so there's nowhere to escalate to — the second
+  // attempt is a genuine retry (a model can answer a second call
+  // differently), not an escalation. A failed or unreachable call after both
+  // falls back to the deterministic rejection below — the visible-fallback
+  // rule, applied to a third AI-shaped step exactly as it already applies to
+  // the first two.
+  const result = await askWithRetry(
+    (tier) => ({
+      tier,
       maxTokens: 200,
       timeoutMs: 15000,
       system:
         "You map a free-text question about an organisation's structure onto exactly one of a fixed set of tools, or none. You never answer the question yourself.",
       prompt: `Query: "${query}"\n\nThe seven tools:\n${TOOLS.map((t) => `- ${t.id}: ${t.label}`).join("\n")}`,
       tool: PICK_TOOL,
-    });
-    if (result.truncated || !result.toolInput) return null;
-    const input = result.toolInput as { matched?: boolean; toolId?: string };
-    if (!input.matched || !input.toolId) return null;
-    const hit = TOOLS.find((t) => t.id === input.toolId);
-    return hit ? hit.id : null;
-  } catch {
-    // A failed or unreachable call falls back to the deterministic rejection
-    // below — the visible-fallback rule, applied to a third AI-shaped step
-    // exactly as it already applies to the first two.
-    return null;
-  }
+    }),
+    ["high", "high"]
+  );
+  if (!result) return null;
+  const input = result.toolInput as { matched?: boolean; toolId?: string };
+  if (!input.matched || !input.toolId) return null;
+  const hit = TOOLS.find((t) => t.id === input.toolId);
+  return hit ? hit.id : null;
 }
 
 export async function interpret(
