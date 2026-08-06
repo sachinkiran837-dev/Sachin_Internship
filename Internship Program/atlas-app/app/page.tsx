@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listOrgs } from "@/db/repo";
 import { UploadForm } from "@/components/upload/UploadForm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DeleteOrgDialog } from "@/components/org/DeleteOrgDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -42,16 +43,18 @@ export default async function Home() {
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {orgs.map((org) => (
-              <Link
+              <div
                 key={org.id}
-                href={`/org/${org.id}`}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-accent"
+                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent"
               >
-                <span>{org.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(org.createdAt).toLocaleString()}
-                </span>
-              </Link>
+                <Link href={`/org/${org.id}`} className="flex flex-1 items-center justify-between gap-2">
+                  <span>{org.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(org.createdAt).toLocaleString()}
+                  </span>
+                </Link>
+                <DeleteOrgDialog orgId={org.id} orgName={org.name} />
+              </div>
             ))}
           </CardContent>
         </Card>

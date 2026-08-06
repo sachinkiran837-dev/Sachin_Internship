@@ -374,6 +374,20 @@ export async function clearDerived(orgId: string): Promise<void> {
   }
 }
 
+/**
+ * Removes an establishment and everything that was ever derived from it or
+ * uploaded for it. Unlike `clearDerived` above, this also takes the raw
+ * source bytes and the org row itself — there is no "read again" to keep
+ * them for, because there is no establishment left to re-read into.
+ *
+ * There is no undo. The caller is the confirmation.
+ */
+export async function deleteOrg(orgId: string): Promise<void> {
+  await clearDerived(orgId);
+  await db.delete(sourceBlobs).where(eq(sourceBlobs.orgId, orgId));
+  await db.delete(orgs).where(eq(orgs.id, orgId));
+}
+
 /** Records the client's corrections and what the re-read was planned as. */
 export async function saveAnswers(
   orgId: string,
