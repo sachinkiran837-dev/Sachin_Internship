@@ -1,6 +1,8 @@
 /**
- * The provider layer: which vendor Atlas is talking to, and whether it can
- * actually do the three things Atlas asks a model for.
+ * The provider layer: which vendor Atlas is talking to, whether it can
+ * actually do the three things Atlas asks a model for, and — since Gemini
+ * joined as a fallback vendor — whether a broken primary genuinely falls
+ * back to it rather than the request just failing.
  *
  * Swapping vendors is the kind of change that looks finished long before it
  * is. Text generation works on the first try — it is a prompt in and a string
@@ -41,7 +43,12 @@ function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   }
 }
 
-const NONE = { OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined, AI_PROVIDER: undefined };
+const NONE = {
+  OPENAI_API_KEY: undefined,
+  ANTHROPIC_API_KEY: undefined,
+  GEMINI_API_KEY: undefined,
+  AI_PROVIDER: undefined,
+};
 
 async function main() {
   /* --- 1. selection, with no network involved -------------------------- */
@@ -62,6 +69,12 @@ async function main() {
     assert(aiModel() === "claude-sonnet-5", `default Anthropic model: got ${aiModel()}`);
   });
 
+  withEnv({ ...NONE, GEMINI_API_KEY: "g-test" }, () => {
+    assert(aiProvider() === "google", "a Gemini key alone selects Gemini — it must work standalone, not only as a fallback");
+    assert(aiModel() === "gemini-2.5-flash", `default Gemini model: got ${aiModel()}`);
+    assert(providerLabel() === "Gemini", `providerLabel must read plainly: ${providerLabel()}`);
+  });
+
   // The case this exists for: a key added alongside an old one. Switching
   // must not require deleting the old key first, because that is an outage
   // in between.
@@ -69,8 +82,20 @@ async function main() {
     assert(aiProvider() === "openai", "with both keys and no preference, OpenAI wins");
   });
 
+  // Gemini sits last in the default order — in practice it's added as the
+  // fallback vendor alongside an existing primary, not as anyone's chosen
+  // first pick, so it must never silently outrank a key that was already
+  // there.
+  withEnv({ ...NONE, ANTHROPIC_API_KEY: "sk-b", GEMINI_API_KEY: "g-test" }, () => {
+    assert(aiProvider() === "anthropic", "Gemini must not outrank an existing Anthropic key by default");
+  });
+
   withEnv({ OPENAI_API_KEY: "sk-a", ANTHROPIC_API_KEY: "sk-b", AI_PROVIDER: "anthropic" }, () => {
     assert(aiProvider() === "anthropic", "AI_PROVIDER must override the default order");
+  });
+
+  withEnv({ ...NONE, GEMINI_API_KEY: "g-test", AI_PROVIDER: "gemini" }, () => {
+    assert(aiProvider() === "google", `AI_PROVIDER must accept "gemini" as well as "google": got ${aiProvider()}`);
   });
 
   // A preference for a provider whose key is missing is not a fallback to
@@ -84,14 +109,14 @@ async function main() {
     assert(aiModel() === "gpt-4.1", `the model override must win: got ${aiModel()}`);
   });
 
-  console.log("1. Selection rules hold: order, override, missing-key preference, model overrides.");
+  console.log("1. Selection rules hold: order, override, missing-key preference, model overrides, Gemini included.");
 
   /* --- 2. the three things Atlas actually asks for --------------------- */
 
   if (!hasAI()) {
     console.log(
-      "2. No key configured, so the live round trips were skipped. Set OPENAI_API_KEY or " +
-        "ANTHROPIC_API_KEY and run this again before trusting a deployment."
+      "2. No key configured, so the live round trips were skipped. Set OPENAI_API_KEY, " +
+        "ANTHROPIC_API_KEY or GEMINI_API_KEY and run this again before trusting a deployment."
     );
     console.log("\nPROVIDER SELECTION CHECKS PASSED (round trips skipped)");
     return;
@@ -157,6 +182,35 @@ async function main() {
   console.log(`   c. Truncation    → reported (finish at ceiling), not left to the parser`);
 
   console.log(`\nALL PROVIDER CHECKS PASSED against ${providerLabel()}`);
+
+  /* --- 3. the vendor-level fallback -------------------------------------- */
+
+  if (!process.env.GEMINI_API_KEY) {
+    console.log(
+      "\n3. No GEMINI_API_KEY configured, so the fallback round trip was skipped. Set it and run " +
+        "this again to prove a broken primary actually reaches Gemini rather than just failing."
+    );
+    return;
+  }
+
+  console.log("\n3. A broken primary key falls back to Gemini rather than failing outright.");
+  // withEnv is synchronous — its `finally` restores the environment the
+  // instant `fn()` returns, which for an async callback is before the
+  // awaited network call inside it has actually run. Saved and restored by
+  // hand here instead, around the whole awaited round trip.
+  const brokenVar = aiProvider() === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+  const realKey = process.env[brokenVar];
+  process.env[brokenVar] = `${brokenVar === "ANTHROPIC_API_KEY" ? "sk-ant" : "sk"}-deliberately-invalid`;
+  try {
+    const fallback = await ask({ prompt: "Reply with exactly the word: ready", maxTokens: 20 });
+    assert(fallback.text.toLowerCase().includes("ready"), `expected the Gemini fallback to answer, got: "${fallback.text}"`);
+    assert(fallback.model.toLowerCase().includes("gemini"), `expected a Gemini model to have answered, got: ${fallback.model}`);
+    console.log(`   Primary key broken deliberately → answered via ${fallback.model} instead of failing`);
+  } finally {
+    process.env[brokenVar] = realKey;
+  }
+
+  console.log("\nFALLBACK CHECK PASSED — a failing primary vendor reaches Gemini, not an error");
 }
 
 main().catch((err) => {

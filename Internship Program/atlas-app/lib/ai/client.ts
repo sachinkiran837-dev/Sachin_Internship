@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { GoogleGenAI, FunctionCallingConfigMode } from "@google/genai";
 import modelTiers from "@/config/model-tiers.json";
 
 /**
@@ -24,26 +25,43 @@ import modelTiers from "@/config/model-tiers.json";
  * Visible-fallback pattern (house convention, not invented here): every
  * AI-shaped behaviour in this app has a deterministic fallback path, and the
  * UI must say plainly which path it took. Nothing is silently degraded.
+ *
+ * A second, vendor-level fallback sits underneath that one, inside `ask()`
+ * itself: if the configured primary vendor's own call throws — an outage, a
+ * rate limit, an account with no credit left — and a Gemini key is present,
+ * `ask()` retries the identical request against Gemini before giving up.
+ * From a call site's point of view nothing changed; it still gets an
+ * `AiResult` or an error to catch, and `result.model` still names whichever
+ * model actually answered. This is not a substitute for the deterministic
+ * fallback every caller already has — it exists so that fallback is reached
+ * for "no AI vendor could answer this", not for "the one vendor happened to
+ * be down".
  */
 
-export type AiProvider = "anthropic" | "openai";
+export type AiProvider = "anthropic" | "openai" | "google";
 
 /**
  * Which vendor this deployment is talking to, or null when none is
  * configured.
  *
  * `AI_PROVIDER` decides when it is set. Otherwise the first key present
- * wins, OpenAI first — a deployment that has just had an OpenAI key added
- * alongside an old Anthropic one is a deployment that is switching, and
- * making them delete the old key first would mean an outage in between.
+ * wins, OpenAI first, then Anthropic, then Gemini — a deployment that has
+ * just had a new key added alongside an old one is a deployment that is
+ * switching, and making them delete the old key first would mean an outage
+ * in between. Gemini sits last in that order deliberately: in practice it is
+ * added as `ask()`'s fallback vendor (see the file's own doc comment) rather
+ * than chosen as anyone's primary, but a deployment carrying only a Gemini
+ * key still works standalone exactly like the other two.
  */
 export function aiProvider(): AiProvider | null {
   const forced = process.env.AI_PROVIDER?.trim().toLowerCase();
   if (forced === "openai") return process.env.OPENAI_API_KEY ? "openai" : null;
   if (forced === "anthropic") return process.env.ANTHROPIC_API_KEY ? "anthropic" : null;
+  if (forced === "google" || forced === "gemini") return process.env.GEMINI_API_KEY ? "google" : null;
 
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.GEMINI_API_KEY) return "google";
   return null;
 }
 
@@ -58,24 +76,37 @@ export function providerLabel(): string {
       return "OpenAI";
     case "anthropic":
       return "Anthropic";
+    case "google":
+      return "Gemini";
     default:
       return "no AI provider";
   }
 }
 
 /**
- * The model in use.
+ * The model in use for whichever vendor {@link aiProvider} resolves to.
  *
- * Both defaults are deliberately the workhorse of their family rather than
- * the newest thing: this has to run on whatever account the key came from,
- * and a model id the account cannot reach fails at the first request with an
- * error that looks nothing like "wrong model". Override per provider when
- * you want a pinned snapshot or something better.
+ * All three defaults are deliberately the workhorse of their family rather
+ * than the newest thing: this has to run on whatever account the key came
+ * from, and a model id the account cannot reach fails at the first request
+ * with an error that looks nothing like "wrong model". Override per provider
+ * when you want a pinned snapshot or something better.
  */
 export function aiModel(): string {
-  return aiProvider() === "openai"
-    ? (process.env.OPENAI_MODEL ?? "gpt-4o")
-    : (process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5");
+  const provider = aiProvider();
+  if (provider === "openai") return process.env.OPENAI_MODEL ?? "gpt-4o";
+  if (provider === "google") return geminiModel();
+  return process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+}
+
+/**
+ * Gemini's own default, kept separate from {@link aiModel} because Gemini is
+ * reached as `ask()`'s fallback vendor even when `aiProvider()` resolves to
+ * something else entirely — `aiModel()` would name the wrong vendor's model
+ * in that moment, since it always answers for the *primary*.
+ */
+function geminiModel(): string {
+  return process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 }
 
 /**
@@ -109,9 +140,15 @@ export function aiModel(): string {
  */
 export type AiTier = "low" | "medium" | "high";
 
-function modelForTier(tier: AiTier): string {
-  const entry = (modelTiers as Record<AiTier, { anthropic: string; openai: string }>)[tier];
-  return aiProvider() === "openai" ? entry.openai : entry.anthropic;
+/**
+ * Takes the provider explicitly rather than reading {@link aiProvider} —
+ * when Gemini is answering as the fallback vendor, `aiProvider()` still
+ * names the primary that just failed, and resolving Gemini's own tiered
+ * model off of that would silently hand it the wrong vendor's model id.
+ */
+function modelForTier(tier: AiTier, provider: AiProvider): string {
+  const entry = (modelTiers as Record<AiTier, Record<AiProvider, string>>)[tier];
+  return entry[provider];
 }
 
 /** Kept as a value for the call sites that only report which model ran. */
@@ -166,13 +203,36 @@ export interface AiResult {
 
 let anthropic: Anthropic | null = null;
 let openai: OpenAI | null = null;
+let gemini: GoogleGenAI | null = null;
+
+function askByProvider(provider: AiProvider, request: AiRequest): Promise<AiResult> {
+  if (provider === "openai") return askOpenAI(request);
+  if (provider === "google") return askGemini(request);
+  return askAnthropic(request);
+}
 
 export async function ask(request: AiRequest): Promise<AiResult> {
   const provider = aiProvider();
   if (!provider) {
     throw new Error("No AI provider is configured — check hasAI() before calling this.");
   }
-  return provider === "openai" ? askOpenAI(request) : askAnthropic(request);
+
+  try {
+    return await askByProvider(provider, request);
+  } catch (primaryError) {
+    // Gemini is the fallback vendor, never the thing being fallen back from
+    // — if it's already the primary, or there's no key for it, the primary
+    // vendor's own error is what the caller needs to see.
+    if (provider === "google" || !process.env.GEMINI_API_KEY) throw primaryError;
+
+    try {
+      return await askGemini(request);
+    } catch (fallbackError) {
+      throw new Error(
+        `${providerLabel()} failed (${(primaryError as Error).message}), and the Gemini fallback also failed: ${(fallbackError as Error).message}`
+      );
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -204,7 +264,7 @@ async function askAnthropic(request: AiRequest): Promise<AiResult> {
 
   const response = await anthropic.messages.create(
     {
-      model: request.tier ? modelForTier(request.tier) : aiModel(),
+      model: request.tier ? modelForTier(request.tier, "anthropic") : aiModel(),
       max_tokens: request.maxTokens,
       ...(request.system ? { system: request.system } : {}),
       ...(request.tool
@@ -266,7 +326,7 @@ async function askOpenAI(request: AiRequest): Promise<AiResult> {
 
   const response = await openai.chat.completions.create(
     {
-      model: request.tier ? modelForTier(request.tier) : aiModel(),
+      model: request.tier ? modelForTier(request.tier, "openai") : aiModel(),
       // Not `max_tokens`: that parameter is deprecated and rejected outright
       // by the newer models, which is a failure that looks like a bad key
       // rather than like a bad parameter.
@@ -323,5 +383,71 @@ async function askOpenAI(request: AiRequest): Promise<AiResult> {
     toolInput,
     truncated: choice?.finish_reason === "length",
     model: response.model,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Gemini                                                              */
+/* ------------------------------------------------------------------ */
+
+async function askGemini(request: AiRequest): Promise<AiResult> {
+  if (!gemini) gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+  if (request.media) {
+    parts.push({
+      inlineData: {
+        mimeType: request.media.kind === "pdf" ? "application/pdf" : request.media.mediaType,
+        data: request.media.base64,
+      },
+    });
+  }
+  parts.push({ text: request.prompt });
+
+  const response = await gemini.models.generateContent({
+    model: request.tier ? modelForTier(request.tier, "google") : geminiModel(),
+    contents: [{ role: "user", parts }],
+    config: {
+      maxOutputTokens: request.maxTokens,
+      ...(request.system ? { systemInstruction: request.system } : {}),
+      ...(request.timeoutMs ? { httpOptions: { timeout: request.timeoutMs } } : {}),
+      ...(request.tool
+        ? {
+            // The same JSON Schema every other vendor already gets, passed
+            // straight through via `parametersJsonSchema` rather than
+            // translated into Gemini's own uppercase-`Type`-enum `Schema`
+            // shape — the two are mutually exclusive on this SDK, and the
+            // JSON Schema form is the one every existing `AiTool.input_schema`
+            // already is.
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: request.tool.name,
+                    description: request.tool.description,
+                    parametersJsonSchema: request.tool.input_schema,
+                  },
+                ],
+              },
+            ],
+            toolConfig: {
+              functionCallingConfig: {
+                mode: FunctionCallingConfigMode.ANY,
+                allowedFunctionNames: [request.tool.name],
+              },
+            },
+          }
+        : {}),
+    },
+  });
+
+  const call = response.functionCalls?.find((c) => c.name === request.tool?.name);
+  const finishReason = response.candidates?.[0]?.finishReason;
+
+  return {
+    text: (response.text ?? "").trim(),
+    toolInput: call?.args ?? null,
+    truncated: finishReason === "MAX_TOKENS",
+    model: response.modelVersion ?? geminiModel(),
   };
 }
