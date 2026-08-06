@@ -1,20 +1,12 @@
-import { currency } from "@/lib/format/currency";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, Map } from "lucide-react";
 import { getCleaningLedger, getOrg, hasSourceBlobs } from "@/db/repo";
 import { loadCanonicalTable } from "@/lib/canonical/load";
 import { OrgNav } from "@/components/OrgNav";
 import { ContextRedo } from "@/components/ingest/ContextRedo";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { CanonicalTableView } from "@/components/canonical/CanonicalTableView";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -62,13 +54,21 @@ export default async function CanonicalDataPage({
             </p>
             <h1 className="mt-1 text-2xl">{table.rows.length.toLocaleString()} rows</h1>
           </div>
-          <a
-            href={`/org/${orgId}/data/canonical.csv`}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            <Download className="size-4" aria-hidden />
-            Download CSV
-          </a>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link href={`/org/${orgId}/map`}>
+              <Button variant="outline">
+                <Map className="size-4" aria-hidden />
+                Open establishment map
+              </Button>
+            </Link>
+            <a
+              href={`/org/${orgId}/data/canonical.csv`}
+              className="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Download className="size-4" aria-hidden />
+              Download CSV
+            </a>
+          </div>
         </div>
 
         <p className="text-xs text-muted-foreground">
@@ -95,63 +95,8 @@ export default async function CanonicalDataPage({
           buttonLabel="Redo the dataset"
         />
 
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Job title</TableHead>
-                <TableHead>Function</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>{table.brandLabel}</TableHead>
-                <TableHead>Manager</TableHead>
-                <TableHead>Employment</TableHead>
-                <TableHead className="text-right">FTE</TableHead>
-                <TableHead className="text-right">Salary</TableHead>
-                <TableHead className="text-right">Annual cost</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.rows.slice(0, PREVIEW_ROWS).map((r, i) => (
-                <TableRow key={i} title={r.flags.join(" · ")}>
-                  <TableCell className="font-medium">{r.employee}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.title}</TableCell>
-                  <TableCell>{r.department || <Missing />}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {r.departmentAsStated || <Missing />}
-                  </TableCell>
-                  <TableCell>{r.brand || <Missing />}</TableCell>
-                  <TableCell>{r.manager || <Missing />}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        r.employmentType === "Agency" || r.employmentType === "Vacant"
-                          ? "outline"
-                          : "secondary"
-                      }
-                      className="font-normal"
-                    >
-                      {r.employmentType}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{r.fte.toFixed(2)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.salary === null ? <Missing /> : currency(r.salary)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.annualCost > 0 ? currency(r.annualCost) : <Missing />}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <CanonicalTableView rows={table.rows} brandLabel={table.brandLabel} previewRows={PREVIEW_ROWS} />
       </main>
     </div>
   );
-}
-
-/** An empty cell that says it is empty, rather than looking like a zero. */
-function Missing() {
-  return <span className="text-xs text-muted-foreground">not stated</span>;
 }

@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import {
   getBaselinePositions,
   getIngestPlan,
@@ -15,7 +14,6 @@ import { PlanReport } from "@/components/ingest/PlanReport";
 import { IngestNotes } from "@/components/ingest/IngestNotes";
 import { IssueGroup } from "@/components/ingest/IssueGroup";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -72,16 +70,11 @@ export default async function OrgConfirmPage({
     <div className="flex flex-1 flex-col">
       <OrgNav orgId={orgId} active="confirm" />
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">{org.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              {positions.length} positions · {org.anonymized ? "anonymised" : "not anonymised"}
-            </p>
-          </div>
-          <Link href={`/org/${orgId}/map`}>
-            <Button>Open establishment map</Button>
-          </Link>
+        <div>
+          <h1 className="text-xl font-semibold">{org.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {positions.length} positions · {org.anonymized ? "anonymised" : "not anonymised"}
+          </p>
         </div>
 
         {!hasIssues ? (

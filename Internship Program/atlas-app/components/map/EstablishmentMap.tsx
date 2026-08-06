@@ -313,6 +313,13 @@ function EstablishmentMapInner({
   const visibleIds = useMemo(() => {
     const visible = new Set<string>();
     function visit(id: string) {
+      // A filter or search narrows the chart to matches and the path down to
+      // them — never a dimmed sibling taking up space beside the one thing
+      // that was asked for. The root is the one exception, kept as an anchor
+      // even when nothing under it matches, so "0 matches" has a chart to sit on.
+      if (hasActiveFilter && id !== rootId && !matches.has(id) && !ancestorsOfMatches.has(id)) {
+        return;
+      }
       visible.add(id);
       if (!effectiveExpandedIds.has(id)) return;
       const node = byId.get(id);
@@ -320,7 +327,7 @@ function EstablishmentMapInner({
     }
     if (rootId) visit(rootId);
     return visible;
-  }, [byId, effectiveExpandedIds, rootId]);
+  }, [byId, effectiveExpandedIds, rootId, hasActiveFilter, matches, ancestorsOfMatches]);
 
   // Positions scoped to what's actually visible — a collapsed node never
   // reserves the horizontal width of its hidden subtree (see
