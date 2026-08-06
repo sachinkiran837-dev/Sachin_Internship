@@ -19,28 +19,33 @@ export function PlanReport({ context, plan }: { context: string; plan: IngestPla
   const [open, setOpen] = useState(false);
   if (!context.trim()) return null;
 
-  const unread = plan === null || plan.source !== "ai";
+  const readByRule = plan?.source === "rules";
+  const unread = plan === null || (plan.source !== "ai" && plan.source !== "rules");
   const decided = plan?.files ?? [];
   const warnings = plan?.warnings ?? [];
 
-  // Instructions that were read and fully applied, with nothing left over,
-  // are not something the client needs to act on — only a refusal or a
-  // leftover warning earns a place among the issues.
-  if (!unread && warnings.length === 0) return null;
+  // Instructions that were read by a model and fully applied, with nothing
+  // left over, are not something the client needs to act on. A refusal, a
+  // leftover warning, and a partial pattern-only reading all earn a place
+  // among the issues — the last one because it never claims to have
+  // understood the whole sentence, only matched a piece of it.
+  if (!unread && !readByRule && warnings.length === 0) return null;
 
   return (
     <Card>
       <CardHeader className="gap-2">
         <div className="flex items-center justify-between gap-3">
           <CardTitle>What you told Atlas about these files</CardTitle>
-          <Badge variant={unread ? "destructive" : "secondary"} className="shrink-0">
-            {unread ? "Not applied" : "Applied"}
+          <Badge variant={unread ? "destructive" : readByRule ? "outline" : "secondary"} className="shrink-0">
+            {unread ? "Not applied" : readByRule ? "Partly applied" : "Applied"}
           </Badge>
         </div>
         <p className="text-sm text-muted-foreground">
           {unread
             ? "These instructions were stored but did not shape the files — bound by column names alone."
-            : `${warnings.length} thing${warnings.length === 1 ? "" : "s"} asked for could not be done.`}
+            : readByRule
+              ? "No model was available, so only a pattern Atlas already recognised was applied — not the whole sentence."
+              : `${warnings.length} thing${warnings.length === 1 ? "" : "s"} asked for could not be done.`}
         </p>
       </CardHeader>
 

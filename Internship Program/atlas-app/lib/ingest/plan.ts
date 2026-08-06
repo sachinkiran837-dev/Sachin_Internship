@@ -110,7 +110,14 @@ export interface IngestPlan {
   notes: string;
   /** Everything the planner asked for that could not be honoured. */
   warnings: string[];
-  source: "ai" | "unavailable" | "failed";
+  /**
+   * "rules" is a model-free reading — a fixed, small set of phrasings (see
+   * `readByRule`) matched by pattern rather than understood, used only when
+   * no model could be reached at all. It is real ingest-time effect, same as
+   * "ai", just narrower: it catches the handful of instructions it
+   * recognises exactly and leaves everything else in the sentence unread.
+   */
+  source: "ai" | "rules" | "unavailable" | "failed";
   model: string | null;
 }
 
@@ -211,6 +218,17 @@ export async function planIngest(
   if (!instruction || files.length === 0) return null;
 
   if (!hasAI()) {
+    const rule = readByRule(instruction, files);
+    if (rule) {
+      return {
+        ...validatePlan(JSON.stringify(rule.json), files, null),
+        source: "rules",
+        notes: ruleFallbackNotes(
+          "This deployment has no AI key set, so a model could not read your instructions.",
+          rule.matched
+        ),
+      };
+    }
     return {
       files: [],
       groupBy: null,
@@ -248,6 +266,18 @@ export async function planIngest(
     // reach the parser, and they call for completely different responses —
     // so the one case that can be told apart is told apart here.
     if (answer.truncated) {
+      const rule = readByRule(instruction, files);
+      if (rule) {
+        return {
+          ...validatePlan(JSON.stringify(rule.json), files, answer.model),
+          source: "rules",
+          notes: ruleFallbackNotes(
+            `Reading them across ${files.length} file${files.length === 1 ? "" : "s"} produced a plan too long ` +
+              `for the model to finish, so its own reading wasn't used.`,
+            rule.matched
+          ),
+        };
+      }
       return {
         files: [],
         groupBy: null,
@@ -267,6 +297,23 @@ export async function planIngest(
 
     return validatePlan(text, files, answer.model);
   } catch (err) {
+    // The full error — which can be a provider's raw JSON body, doubled when
+    // a fallback also fails — is worth having somewhere, just not in a note
+    // a client reads. Logged here rather than dropped, so a deployment that
+    // keeps failing to read instructions has something to check other than
+    // a client's report that "it didn't do anything".
+    console.error("planIngest failed:", err);
+    const rule = readByRule(instruction, files);
+    if (rule) {
+      return {
+        ...validatePlan(JSON.stringify(rule.json), files, null),
+        source: "rules",
+        notes: ruleFallbackNotes(
+          `Reading them failed (${summariseFailure(err as Error)}).`,
+          rule.matched
+        ),
+      };
+    }
     return {
       files: [],
       groupBy: null,
@@ -274,7 +321,7 @@ export async function planIngest(
       functionGrouping: null,
       answers: EMPTY_PLAN_ANSWERS,
       notes:
-        `Your instructions were recorded but not applied — reading them failed (${(err as Error).message}). ` +
+        `Your instructions were recorded but not applied — reading them failed (${summariseFailure(err as Error)}). ` +
         `The files were bound by their column names alone, which is what happens with the box left empty.`,
       warnings: [],
       source: "failed",
@@ -345,6 +392,148 @@ function priorDigest(prior: PriorRead): string {
 function truncate(value: string, limit = MAX_VALUE_CHARS): string {
   const v = value.trim().replace(/\s+/g, " ");
   return v.length > limit ? `${v.slice(0, limit)}…` : v;
+}
+
+/**
+ * A vendor error read by a client, not a developer — never the raw body a
+ * provider (or, doubled, a failed fallback) throws back. That body is a JSON
+ * blob of quota tables and request IDs; what a client needs from it is one
+ * of three plain facts: no credit, rate-limited, or something else broke.
+ * The full message is still logged where it was thrown, for whoever owns
+ * the deployment.
+ */
+function summariseFailure(err: Error): string {
+  const message = err.message;
+  if (/credit balance is too low|insufficient.?quota/i.test(message)) {
+    return "the configured AI account has run out of credit";
+  }
+  if (/rate.?limit|quota exceeded|RESOURCE_EXHAUSTED|429/i.test(message)) {
+    return "the configured AI account has hit its rate or quota limit for now";
+  }
+  return message.length > 160 ? "the configured AI provider returned an error" : message;
+}
+
+/**
+ * A common English word for a canonical field, keyed the way someone would
+ * actually write it in a sentence rather than the field's own internal name.
+ * Deliberately narrower than the model's own judgement — "brand" and
+ * "entity" are missing on purpose, because those are read through `groupBy`
+ * (a dimension, not a column-to-field mapping) and guessing one from a bare
+ * word here would be exactly the kind of invention this file exists to avoid.
+ */
+const FIELD_WORDS: Record<string, string> = {
+  department: "department",
+  dept: "department",
+  division: "department",
+  title: "title",
+  "job title": "title",
+  jobtitle: "title",
+  role: "title",
+  position: "title",
+  name: "name",
+  employee: "name",
+  "employee name": "name",
+  manager: "managerName",
+  "manager id": "managerName",
+  "manager name": "managerName",
+  "reports to": "managerName",
+  cost: "cost",
+  salary: "cost",
+  "annual cost": "cost",
+  fte: "fte",
+  status: "status",
+  site: "site",
+  location: "site",
+  grade: "grade",
+  classification: "grade",
+  band: "grade",
+};
+
+/** The captured field phrase, or its first word, matched against FIELD_WORDS. */
+function resolveFieldWord(raw: string): string | null {
+  const cleaned = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  if (FIELD_WORDS[cleaned]) return FIELD_WORDS[cleaned];
+  return FIELD_WORDS[cleaned.split(" ")[0]] ?? null;
+}
+
+/**
+ * The one thing this file's real reader (the model) can do that this cannot:
+ * understand a sentence it has never seen the shape of before. This exists
+ * only for the moments a model genuinely cannot be reached — no key, an
+ * account with no credit, a rate limit — so that "no AI configured" and
+ * "the sentence was read and ignored" stop being the same outcome for the
+ * handful of things a client is most likely to actually write.
+ *
+ * It recognises three phrasings, each matched by pattern rather than
+ * judgement, each checked against the real files before it is used exactly
+ * as the model's own output already is:
+ *   - "treat department as function" — the function-grouping rollup toggle.
+ *   - "a full-time week here is N hours" — same cap the model's answer gets.
+ *   - "treat 'X' as <field>" — a single column remap, only when there is
+ *     exactly one real file, because which file to declare a role for
+ *     is a judgement call, not a pattern, once there is more than one.
+ *
+ * A sentence matching none of these returns null — read as if the box had
+ * been left empty, never as a partial or wrong guess.
+ */
+function readByRule(
+  instruction: string,
+  files: PlanInput[]
+): { json: Record<string, unknown>; matched: string[] } | null {
+  const matched: string[] = [];
+  const json: Record<string, unknown> = {};
+
+  if (
+    /\btreat\s+(the\s+)?department\s+(column\s+)?as\s+(the\s+)?function\b/i.test(instruction) ||
+    /\b(don'?t|do not|never)\s+(roll\s*up|group)\s+(the\s+)?departments?\b/i.test(instruction) ||
+    /\bfunction\s+(should\s+)?(just\s+)?be\s+(the\s+)?department\b/i.test(instruction)
+  ) {
+    json.functionGrouping = "asStated";
+    matched.push('"treat department as function" — function left as stated, not rolled up');
+  }
+
+  const hoursMatch =
+    instruction.match(/full[- ]?time\s+week\s*(?:here)?\s*is\s*(\d+(?:\.\d+)?)\s*hours?/i) ??
+    instruction.match(/(\d+(?:\.\d+)?)\s*hours?\s*(?:a|per)\s*week/i);
+  if (hoursMatch) {
+    const hours = Number(hoursMatch[1]);
+    if (Number.isFinite(hours) && hours > 0 && hours <= MAX_HOURS_PER_WEEK) {
+      json.answers = { hoursPerWeek: hours, valueMap: {} };
+      matched.push(`a full-time week is ${hours} hours`);
+    }
+  }
+
+  const remapMatch = instruction.match(
+    /treat\s+(?:the\s+)?['"‘’]([^'"‘’]+)['"‘’]\s+(?:column\s+)?as\s+(?:the\s+)?([a-z][a-z ]*)/i
+  );
+  if (remapMatch && files.length === 1) {
+    const [, rawColumn, rawField] = remapMatch;
+    const field = resolveFieldWord(rawField);
+    const actual = matchHeader(rawColumn, files[0].parsed.headers);
+    if (field && actual) {
+      const label = CANONICAL_FIELDS[field as keyof typeof CANONICAL_FIELDS];
+      json.files = [
+        {
+          filename: files[0].filename,
+          use: "positions",
+          reason: `Read from your instructions: "${actual}" is the ${label}.`,
+          columns: { [actual]: field },
+        },
+      ];
+      matched.push(`"${actual}" read as ${label}`);
+    }
+  }
+
+  return matched.length > 0 ? { json, matched } : null;
+}
+
+/** The notes shown for a plan applied by pattern rather than by a model. */
+function ruleFallbackNotes(reasonNoModel: string, matched: string[]): string {
+  return (
+    `${reasonNoModel} No model was available to read the rest of it, but it matched what Atlas can ` +
+    `already recognise without one: ${matched.join("; ")}. ${matched.length === 1 ? "That was" : "Those were"} ` +
+    `applied by pattern, not judgement — anything else in your instructions was left alone rather than guessed at.`
+  );
 }
 
 /**
@@ -686,7 +875,7 @@ function asArray(value: unknown): unknown[] {
 export function planHasEffect(plan: IngestPlan | null): boolean {
   return Boolean(
     plan &&
-      plan.source === "ai" &&
+      (plan.source === "ai" || plan.source === "rules") &&
       (plan.files.length > 0 ||
         plan.groupBy !== null ||
         plan.rowFilter !== null ||

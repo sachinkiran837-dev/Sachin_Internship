@@ -6,6 +6,7 @@ import { mergeAnswers } from "@/lib/ingest/answers";
 import {
   getAnswers,
   getBusinessContext,
+  getIngestPlan,
   getNotes,
   getOrg,
   getSourceBlobs,
@@ -31,6 +32,17 @@ import {
 export interface AnswerActionState {
   error: string | null;
   ok: boolean;
+  /**
+   * What the planner concluded from a free-text instruction, in its own
+   * words — only set when this submission actually carried one. A re-read
+   * can succeed (`ok: true`) while the sentence typed into it went nowhere:
+   * no AI configured, the model failing, or nothing in it the plan schema
+   * could act on. Without this, all three look identical to a client — a
+   * calm checkmark next to a table that didn't move.
+   */
+  planNotes: string | null;
+  /** False when a free-text instruction was submitted but not read at all. */
+  planApplied: boolean | null;
 }
 
 export async function answerIngestAction(
@@ -38,11 +50,13 @@ export async function answerIngestAction(
   formData: FormData
 ): Promise<AnswerActionState> {
   const orgId = String(formData.get("orgId") ?? "");
-  if (!orgId) return { error: "No establishment to correct.", ok: false };
+  if (!orgId) return { error: "No establishment to correct.", ok: false, planNotes: null, planApplied: null };
 
   try {
     const org = await getOrg(orgId);
-    if (!org) return { error: "That establishment no longer exists.", ok: false };
+    if (!org) {
+      return { error: "That establishment no longer exists.", ok: false, planNotes: null, planApplied: null };
+    }
 
     const blobs = await getSourceBlobs(orgId);
     if (blobs.length === 0) {
@@ -51,6 +65,8 @@ export async function answerIngestAction(
           "Atlas no longer has the files this establishment was built from, so it cannot read them again. " +
           "Upload them once more with your corrections in the instructions box.",
         ok: false,
+        planNotes: null,
+        planApplied: null,
       };
     }
 
@@ -114,7 +130,9 @@ export async function answerIngestAction(
       },
     });
 
-    if ("error" in result) return { error: result.error, ok: false };
+    if ("error" in result) {
+      return { error: result.error, ok: false, planNotes: null, planApplied: null };
+    }
 
     // A re-read can be triggered from the confirm screen, the canonical
     // table or the establishment map now, and it changes what every one of
@@ -124,8 +142,28 @@ export async function answerIngestAction(
     for (const path of ["", "/data", "/map", "/findings", "/scenarios", "/ask"]) {
       revalidatePath(`/org/${orgId}${path}`);
     }
-    return { error: null, ok: true };
+
+    // A re-read can succeed while the sentence that triggered it went
+    // nowhere — no AI configured, the model failing, nothing in it the plan
+    // schema could act on. Told here in the planner's own words, exactly as
+    // the confirm screen's plan report already does, so this box says the
+    // same thing whichever screen it's read from rather than a blind
+    // checkmark next to a table that didn't move.
+    let planNotes: string | null = null;
+    let planApplied: boolean | null = null;
+    if (answers.extraContext.trim()) {
+      const plan = await getIngestPlan(orgId);
+      planApplied = plan !== null && (plan.source === "ai" || plan.source === "rules");
+      planNotes = plan?.notes?.trim() || null;
+    }
+
+    return { error: null, ok: true, planNotes, planApplied };
   } catch (err) {
-    return { error: `Re-reading the files failed: ${(err as Error).message}`, ok: false };
+    return {
+      error: `Re-reading the files failed: ${(err as Error).message}`,
+      ok: false,
+      planNotes: null,
+      planApplied: null,
+    };
   }
 }

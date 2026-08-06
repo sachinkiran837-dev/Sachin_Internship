@@ -87,7 +87,7 @@ function applyPlanAnswers(
   current: IngestAnswers,
   plan: IngestPlan | null
 ): IngestAnswers | null {
-  if (!plan || plan.source !== "ai") return null;
+  if (!plan || (plan.source !== "ai" && plan.source !== "rules")) return null;
 
   const hoursPerWeek = current.hoursPerWeek ?? plan.answers.hoursPerWeek;
 

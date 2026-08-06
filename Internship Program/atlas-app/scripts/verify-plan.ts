@@ -15,7 +15,7 @@
 import { bindFiles, type SourceFile } from "../lib/ingest/bindFiles";
 import { buildOrgGraph } from "../lib/ingest/buildGraph";
 import { computeMetrics } from "../lib/metrics/diagnostics";
-import { EMPTY_PLAN_ANSWERS, planIngest, validatePlan, type IngestPlan } from "../lib/ingest/plan";
+import { EMPTY_PLAN_ANSWERS, planHasEffect, planIngest, validatePlan, type IngestPlan } from "../lib/ingest/plan";
 import { remove, reassign } from "../lib/scenario/moves";
 import { getBaselineRootId } from "../db/repo";
 import { hasAI, providerLabel } from "../lib/ai/client";
@@ -24,6 +24,39 @@ import type { ParsedFile } from "../lib/ingest/parseFile";
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`);
 }
+
+/**
+ * Runs an async block with a temporary environment, restoring it only after
+ * the block's own promise settles. A sync `finally` around an async callback
+ * restores the environment before the awaited work inside it has actually
+ * run — this awaits first, so the two never race.
+ */
+async function withEnvAsync<T>(
+  vars: Record<string, string | undefined>,
+  fn: () => Promise<T>
+): Promise<T> {
+  const previous: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    previous[k] = process.env[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(previous)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+const NO_AI: Record<string, string | undefined> = {
+  OPENAI_API_KEY: undefined,
+  ANTHROPIC_API_KEY: undefined,
+  GEMINI_API_KEY: undefined,
+  AI_PROVIDER: undefined,
+};
 
 function file(
   filename: string,
@@ -343,6 +376,66 @@ async function main() {
     console.log(`\n8. No key: instructions recorded, applied to nothing, and the reason is stated —`);
     console.log(`   "${unplanned.notes.slice(0, 108)}…"`);
   }
+
+  // --- 8b. without a model, a handful of known phrasings still read -------
+  // Forced off regardless of what's actually configured in this environment,
+  // so this section is exercised identically whether or not a real key is
+  // set — the thing being proven is the pattern matcher, not the network.
+  const rulesFn = await withEnvAsync(NO_AI, () =>
+    planIngest("Treat department as function.", [{ filename: PAYROLL.filename, parsed: PAYROLL.parsed! }])
+  );
+  assert(rulesFn?.source === "rules", `a recognised phrase must read as "rules" with no model: got ${rulesFn?.source}`);
+  assert(rulesFn.functionGrouping === "asStated", "the function-grouping phrase must be recognised without a model");
+
+  const rulesHours = await withEnvAsync(NO_AI, () =>
+    planIngest("A full-time week here is 38 hours.", [{ filename: PAYROLL.filename, parsed: PAYROLL.parsed! }])
+  );
+  assert(rulesHours?.source === "rules", "an hours phrase must also be recognised without a model");
+  assert(rulesHours.answers.hoursPerWeek === 38, `expected 38 hours: got ${rulesHours?.answers.hoursPerWeek}`);
+
+  const rulesColumn = await withEnvAsync(NO_AI, () =>
+    planIngest("Treat the 'Cost Centre' column as the department.", [
+      { filename: PAYROLL.filename, parsed: PAYROLL.parsed! },
+    ])
+  );
+  assert(rulesColumn?.source === "rules", "a column-remap phrase on a single file must be recognised without a model");
+  assert(
+    rulesColumn.files.length === 1 && rulesColumn.files[0].columns["Cost Centre"] === "department",
+    `expected "Cost Centre" mapped to department: ${JSON.stringify(rulesColumn?.files)}`
+  );
+
+  // The same column-remap phrase, but now there are two files — which one it
+  // would apply to is a judgement call, not a pattern, so it must not guess.
+  const rulesAmbiguous = await withEnvAsync(NO_AI, () =>
+    planIngest("Treat the 'Cost Centre' column as the department.", [
+      { filename: PAYROLL.filename, parsed: PAYROLL.parsed! },
+      { filename: CHART.filename, parsed: CHART.parsed! },
+    ])
+  );
+  assert(
+    rulesAmbiguous?.source === "unavailable",
+    `a column remap across multiple files must not be guessed at: got ${rulesAmbiguous?.source}`
+  );
+
+  // Two recognised phrases in one sentence — both read, neither at the cost
+  // of the other.
+  const rulesBoth = await withEnvAsync(NO_AI, () =>
+    planIngest("Treat department as function. A full-time week here is 40 hours.", [
+      { filename: PAYROLL.filename, parsed: PAYROLL.parsed! },
+    ])
+  );
+  assert(
+    rulesBoth?.source === "rules" &&
+      rulesBoth.functionGrouping === "asStated" &&
+      rulesBoth.answers.hoursPerWeek === 40,
+    `both phrases in one sentence must both be recognised: ${JSON.stringify(rulesBoth)}`
+  );
+  assert(planHasEffect(rulesBoth), "a rules-based plan that set real values must count as having an effect");
+
+  console.log(
+    "8b. Without a model, known phrasings still read: function-as-stated, hours-per-week, a single-file " +
+      "column remap — and a remap across several files is left alone rather than guessed at."
+  );
 
   // --- 9. no instructions must behave exactly as before ------------------
   const untouched = bindFiles([PAYROLL, CHART], null);

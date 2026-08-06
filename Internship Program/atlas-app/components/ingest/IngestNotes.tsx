@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
  * of the data that no longer exists.
  */
 
-const INITIAL: AnswerActionState = { error: null, ok: false };
+const INITIAL: AnswerActionState = { error: null, ok: false, planNotes: null, planApplied: null };
 
 export function IngestNotes({
   orgId,
@@ -93,10 +93,22 @@ export function IngestNotes({
               {state.error}
             </p>
           )}
-          {state.ok && !pending && (
-            <p className="flex items-center gap-2 rounded-md border border-primary/40 bg-accent/40 px-3 py-2 text-sm">
-              <Check className="size-4 shrink-0 text-primary" aria-hidden />
-              Your files were read again with these answers. Every figure below reflects them.
+          {state.ok && !pending && state.planApplied === false && (
+            <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                Your files were read again, but the note you added wasn&rsquo;t applied.{" "}
+                {state.planNotes || "Nothing else changed."}
+              </span>
+            </p>
+          )}
+          {state.ok && !pending && state.planApplied !== false && (
+            <p className="flex items-start gap-2 rounded-md border border-primary/40 bg-accent/40 px-3 py-2 text-sm">
+              <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              <span>
+                {state.planNotes ||
+                  "Your files were read again with these answers. Every figure below reflects them."}
+              </span>
             </p>
           )}
 
