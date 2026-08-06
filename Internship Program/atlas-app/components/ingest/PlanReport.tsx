@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, Filter, Layers, MessageSquareQuote } from "lucide-react";
+import { AlertTriangle, ChevronDown, Filter, Layers, MessageSquareQuote, Ungroup } from "lucide-react";
 import type { IngestPlan } from "@/lib/ingest/plan";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -103,8 +103,19 @@ export function PlanReport({ context, plan }: { context: string; plan: IngestPla
               </div>
             )}
 
-            {(plan?.groupBy || plan?.rowFilter) && (
+            {(plan?.groupBy || plan?.rowFilter || plan?.functionGrouping) && (
               <div className="flex flex-col gap-2">
+                {plan.functionGrouping === "asStated" && (
+                  <p className="flex items-start gap-2 text-muted-foreground">
+                    <Ungroup className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                    <span>
+                      Function left as stated — departments were not rolled up into broader groups.
+                      Every comparison on the findings screen runs on them exactly as your files
+                      named them.
+                    </span>
+                  </p>
+                )}
+
                 {plan.groupBy && (
                   <p className="flex items-start gap-2 text-muted-foreground">
                     <Layers className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />

@@ -204,6 +204,7 @@ export async function runIngest(request: IngestRequest): Promise<IngestResult> {
     orgId,
     anonymize,
     groupBy: bound.groupBy,
+    functionGrouping: plan?.functionGrouping ?? null,
   });
   await savePositions(positions);
 

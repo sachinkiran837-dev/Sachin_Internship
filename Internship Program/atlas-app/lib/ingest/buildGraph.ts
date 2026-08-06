@@ -4,7 +4,13 @@ import { mapColumns } from "./columnMapper";
 import { pseudonymize } from "./anonymize";
 import { classifyRoles, roleKey, type RoleClassification } from "./classify";
 import { note, type IngestNote } from "./notes";
-import { groupPositions, groupingNote, resolveGroup, titleFallbackNote } from "./functionGroups";
+import {
+  functionAsStatedNote,
+  groupPositions,
+  groupingNote,
+  resolveGroup,
+  titleFallbackNote,
+} from "./functionGroups";
 import { parseLooseDate } from "./parseDate";
 import {
   UNCLASSIFIED,
@@ -25,6 +31,12 @@ export interface BuildGraphOptions {
    * instead of under whichever role happened to be picked as the root.
    */
   groupBy?: { column: string; label: string; topLabel: string } | null;
+  /**
+   * "asStated" skips the department→function rollup entirely — every
+   * position's function is its own department, verbatim. Set from
+   * `IngestPlan.functionGrouping`; see plan.ts for when the planner sets it.
+   */
+  functionGrouping?: "asStated" | null;
 }
 
 export interface BuildGraphResult {
@@ -454,10 +466,13 @@ export async function buildOrgGraph(
 
   // The rollup, computed once over the distinct department names rather than
   // once per position — a client file carries a thousand rows and sixty
-  // departments, and the difference is one request against a thousand.
-  const grouping = await groupPositions(
-    resolved.map((r) => ({ department: r.row.department, title: r.row.title }))
-  );
+  // departments, and the difference is one request against a thousand. Skipped
+  // entirely when the client asked for department to also be the function —
+  // there is nothing left for it to decide.
+  const asStatedFunction = options.functionGrouping === "asStated";
+  const grouping = asStatedFunction
+    ? null
+    : await groupPositions(resolved.map((r) => ({ department: r.row.department, title: r.row.title })));
   const distinctDepartments = new Set(resolved.map((r) => r.row.department)).size;
 
   const positions: Position[] = resolved.map((r) => {
@@ -498,7 +513,9 @@ export async function buildOrgGraph(
         : r.row.rawName,
       title: r.row.title,
       department: r.row.department,
-      functionGroup: resolveGroup(grouping, r.row.department, r.row.title),
+      functionGroup: asStatedFunction
+        ? r.row.department
+        : resolveGroup(grouping!, r.row.department, r.row.title),
       site: r.row.site,
       grade: r.row.grade,
       startDate: r.row.startDate,
@@ -522,8 +539,9 @@ export async function buildOrgGraph(
     columnMapping,
     notes: [
       ...agencyNote(positions, Boolean(fteCol)),
-      ...(groupingNote(grouping, distinctDepartments) ? [groupingNote(grouping, distinctDepartments)!] : []),
-      ...(titleFallbackNote(grouping, positions.length)
+      ...(asStatedFunction ? [functionAsStatedNote(distinctDepartments)] : []),
+      ...(grouping && groupingNote(grouping, distinctDepartments) ? [groupingNote(grouping, distinctDepartments)!] : []),
+      ...(grouping && titleFallbackNote(grouping, positions.length)
         ? [titleFallbackNote(grouping, positions.length)!]
         : []),
     ],

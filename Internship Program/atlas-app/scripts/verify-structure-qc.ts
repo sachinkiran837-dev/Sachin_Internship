@@ -29,6 +29,7 @@ const PLAN: IngestPlan = {
   ],
   groupBy: null,
   rowFilter: null,
+  functionGrouping: null,
   answers: { hoursPerWeek: null, valueMap: {} },
   notes: "",
   warnings: [],

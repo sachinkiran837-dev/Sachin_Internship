@@ -51,6 +51,7 @@ function plan(overrides: Partial<IngestPlan>): IngestPlan {
     files: [],
     groupBy: null,
     rowFilter: null,
+    functionGrouping: null,
     answers: EMPTY_PLAN_ANSWERS,
     notes: "",
     warnings: [],

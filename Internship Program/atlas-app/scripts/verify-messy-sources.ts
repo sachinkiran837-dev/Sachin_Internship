@@ -364,6 +364,7 @@ async function main() {
     files: [],
     groupBy: { columns: ["Source Brand", "BRAND"], label: "Brand", topLabel: "Kinyara Group" },
     rowFilter: null,
+    functionGrouping: null,
     answers: EMPTY_PLAN_ANSWERS,
     notes: "",
     warnings: [],

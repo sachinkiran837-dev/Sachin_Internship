@@ -438,3 +438,28 @@ export function titleFallbackNote(
       `scenario play still works on it.`,
   });
 }
+
+/**
+ * States the one case where the rollup above didn't run at all: the client
+ * asked, in their own words, for the department to also be the function.
+ *
+ * Recorded with the same weight as a rollup would be, because it changes the
+ * same thing a rollup changes — what every comparison on the findings screen
+ * is between — and a client reading a function called "Payroll Services" with
+ * eleven people in it should be able to see that this is why, not wonder
+ * whether Atlas failed to group it.
+ */
+export function functionAsStatedNote(distinctDepartments: number): IngestNote {
+  return note("function-as-stated", "assumption", {
+    topic: "Function left as stated",
+    statement:
+      `Your instructions said to treat department as function, so the ${distinctDepartments} department` +
+      `${distinctDepartments === 1 ? "" : "s"} in this establishment were not rolled up into broader ` +
+      `groups — every comparison on the findings screen runs on them exactly as your files named them.`,
+    evidence: "Read from your instructions, not from the data.",
+    effect:
+      `A department below the size where a comparison means anything is still compared on its own — ` +
+      `nothing this small is merged into a broader group to make the comparison safer. If a finding ` +
+      `about a tiny department looks unreliable, that is why.`,
+  });
+}

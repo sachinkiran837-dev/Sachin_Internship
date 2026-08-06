@@ -95,6 +95,17 @@ export interface IngestPlan {
   groupBy: GroupPlan | null;
   rowFilter: RowFilter | null;
   answers: PlanAnswers;
+  /**
+   * "asStated" when the instruction says the department every position
+   * already carries should also be the function every comparison runs on —
+   * skipping the rule+model rollup into a handful of broad buckets (see
+   * `functionGroups.ts`). Rare: that rollup exists precisely because most
+   * clients' departments are too fine-grained to compare safely against each
+   * other. Set only when the instruction says so in as many words — "treat
+   * department as function", "don't group departments" — never inferred from
+   * the department names themselves.
+   */
+  functionGrouping: "asStated" | null;
   /** The planner's summary of what it decided, in plain English. */
   notes: string;
   /** Everything the planner asked for that could not be honoured. */
@@ -158,6 +169,7 @@ Return ONLY a JSON object. No prose before or after it, no markdown code fences.
   ],
   "groupBy": { "columns": ["<source column>", "…one per file that carries this dimension"], "label": "<singular noun>", "topLabel": "<name for the combined top node>" } | null,
   "rowFilter": { "column": "<source column>", "include": ["<value>"], "exclude": ["<value>"] } | null,
+  "functionGrouping": "asStated" | null,
   "answers": { "hoursPerWeek": <number> | null,
                "valueMap": { "<dimension name, matching groupBy.label>": { "<value exactly as it appears in a file>": "<the value it should be read as, exactly as it appears in a file>" } } },
   "notes": "<2-4 sentences to the client: what you concluded and what you did about it>"
@@ -178,6 +190,7 @@ Rules, in order of importance:
 3. A chart or a diagram is "structure" whenever there is also a fuller staff list to lay it over. It is "positions" only when it is the only thing describing who exists.
 4. Set "groupBy" only when the instruction asks for consolidation by some dimension AND a column carrying that dimension actually exists. List the exact column from EVERY file that carries it — two systems rarely name it the same way, and a file whose column you leave out will not be grouped at all. Do not list a column that merely correlates with the dimension.
 5. Set "rowFilter" only when the instruction restricts which rows are in scope. Leave "include" or "exclude" empty when unused.
+5b. Set "functionGrouping" to "asStated" only when the instruction explicitly says the department should also be the function every comparison runs on, instead of being rolled up into broader buckets — "treat department as function", "don't group departments", "function should just be the department name". This turns off a safeguard that keeps small departments from being compared as if they were large ones, so leave it null unless the person says so in as many words.
 6. "answers" carries facts about the organisation that no file states. Set "hoursPerWeek" only when the person says how many hours a full-time week is — it turns hourly rates into annual costs, so a wrong number misprices everyone paid by the hour. Set "valueMap" only when they say that two values naming the same thing should be read as one ("NB is Northbrook"); both sides must be values that actually appear in the files. Leave either null or empty otherwise. Never infer them from the data.
 7. Never invent a filename, a column name or a value. Copy them exactly as given to you. If the instruction asks for something the files cannot support, say so in "notes" and leave the corresponding part of the plan null.
 8. When you are shown what Atlas concluded on a previous read, the person is correcting that reading. Address what they raise, and repeat the parts of the plan that were right — the plan you return replaces the previous one entirely, so anything you leave out is undone.`;
@@ -202,6 +215,7 @@ export async function planIngest(
       files: [],
       groupBy: null,
       rowFilter: null,
+      functionGrouping: null,
       answers: EMPTY_PLAN_ANSWERS,
       notes:
         "Your instructions were recorded but not applied. Reading them takes a model, and this " +
@@ -238,6 +252,7 @@ export async function planIngest(
         files: [],
         groupBy: null,
         rowFilter: null,
+        functionGrouping: null,
         answers: EMPTY_PLAN_ANSWERS,
         notes:
           `Your instructions were recorded but not applied — reading them across ${files.length} file` +
@@ -256,6 +271,7 @@ export async function planIngest(
       files: [],
       groupBy: null,
       rowFilter: null,
+      functionGrouping: null,
       answers: EMPTY_PLAN_ANSWERS,
       notes:
         `Your instructions were recorded but not applied — reading them failed (${(err as Error).message}). ` +
@@ -351,6 +367,7 @@ export function validatePlan(
       files: [],
       groupBy: null,
       rowFilter: null,
+      functionGrouping: null,
       answers: EMPTY_PLAN_ANSWERS,
       notes:
         "Your instructions were recorded but not applied — the plan came back in a shape Atlas could not read. " +
@@ -404,6 +421,7 @@ export function validatePlan(
     files: filePlans,
     groupBy,
     rowFilter: validateRowFilter(parsed.rowFilter, files, warnings),
+    functionGrouping: parsed.functionGrouping === "asStated" ? "asStated" : null,
     answers: validateAnswers(parsed.answers, files, groupBy, warnings),
     notes: String(parsed.notes ?? "").trim(),
     warnings,
@@ -672,6 +690,7 @@ export function planHasEffect(plan: IngestPlan | null): boolean {
       (plan.files.length > 0 ||
         plan.groupBy !== null ||
         plan.rowFilter !== null ||
+        plan.functionGrouping !== null ||
         planAnswersHaveEffect(plan.answers))
   );
 }
