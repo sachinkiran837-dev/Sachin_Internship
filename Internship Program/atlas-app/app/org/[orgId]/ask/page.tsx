@@ -6,11 +6,13 @@ import { AskAtlasForm } from "@/components/ask/AskAtlasForm";
 export const dynamic = "force-dynamic";
 
 /**
- * i3-ask-atlas-interpretation: a bounded conversational surface over seven
- * named engine tools plus h1's redesign-pattern compiler — never a general
- * chatbot, and never a number the model composed. See
- * lib/ask/interpret.ts for the actual compilation logic and its own note on
- * why query matching stays deterministic rather than a third AI surface.
+ * i3-ask-atlas-interpretation: a bounded conversational surface over Atlas's
+ * named engine tools — one per built skill with a genuine standalone
+ * question to answer — plus h1's redesign-pattern compiler. Never a general
+ * chatbot, and never a number the model composed: a model may pick which
+ * tool ran or phrase the sentence around what it returned, never invent a
+ * figure of its own. See lib/ask/interpret.ts for the actual compilation
+ * logic and its own note on how each of those three roles stays bounded.
  */
 export default async function AskPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;

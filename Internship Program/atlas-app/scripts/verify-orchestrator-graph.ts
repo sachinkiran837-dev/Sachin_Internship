@@ -112,11 +112,20 @@ const EDGES: Edge[] = [
   },
   { file: "lib/scenario/phasing.ts", requires: ["@/lib/scenario/impact", "@/lib/analysis/irEbaOverlay"] },
 
-  // Layer 6 — I3 (Ask Atlas) deliberately does not fan in from G.
+  // Layer 6 — I3 (Ask Atlas) now deliberately does fan in from G1/G2's
+  // hypotheses (a "top opportunities" query reads buildHypotheses' own
+  // ranked, already-priced list rather than re-deriving one) but still never
+  // reaches into G2's reconciliation engine directly — a query answers from
+  // what G1/G2 already produced, it never re-prices or re-reconciles a play.
   {
     file: "lib/ask/interpret.ts",
-    requires: ["@/lib/metrics/diagnostics", "@/lib/analysis/keyPersonRisk", "@/lib/scenario/patterns"],
-    forbids: ["@/lib/hypothesis/build", "@/lib/scenario/reconcile"],
+    requires: [
+      "@/lib/metrics/diagnostics",
+      "@/lib/analysis/keyPersonRisk",
+      "@/lib/scenario/patterns",
+      "@/lib/hypothesis/build",
+    ],
+    forbids: ["@/lib/scenario/reconcile"],
   },
 ];
 

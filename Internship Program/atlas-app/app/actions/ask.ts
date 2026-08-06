@@ -1,6 +1,6 @@
 "use server";
 
-import { getActiveScenario, getBaselinePositions, getBaselineRootId, getBusinessContext } from "@/db/repo";
+import { getActiveScenario, getBaselinePositions, getBaselineRootId, getBusinessContext, getIssues } from "@/db/repo";
 import { interpret, type AskResponse } from "@/lib/ask/interpret";
 
 /**
@@ -18,6 +18,7 @@ export async function askAction(orgId: string, _prev: AskResponse | null, formDa
   const scenario = await getActiveScenario(orgId);
   const positions = scenario?.positions ?? baseline;
   const business = await getBusinessContext(orgId);
+  const issues = await getIssues(orgId);
 
-  return await interpret(query, positions, rootId, business);
+  return await interpret(query, positions, rootId, business, issues);
 }
