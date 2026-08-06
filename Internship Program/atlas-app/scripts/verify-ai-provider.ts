@@ -71,7 +71,7 @@ async function main() {
 
   withEnv({ ...NONE, GEMINI_API_KEY: "g-test" }, () => {
     assert(aiProvider() === "google", "a Gemini key alone selects Gemini — it must work standalone, not only as a fallback");
-    assert(aiModel() === "gemini-2.5-flash", `default Gemini model: got ${aiModel()}`);
+    assert(aiModel() === "gemini-flash-latest", `default Gemini model: got ${aiModel()}`);
     assert(providerLabel() === "Gemini", `providerLabel must read plainly: ${providerLabel()}`);
   });
 

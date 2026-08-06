@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { GoogleGenAI, FunctionCallingConfigMode } from "@google/genai";
+import { GoogleGenAI, FunctionCallingConfigMode, ThinkingLevel } from "@google/genai";
 import modelTiers from "@/config/model-tiers.json";
 
 /**
@@ -106,7 +106,15 @@ export function aiModel(): string {
  * in that moment, since it always answers for the *primary*.
  */
 function geminiModel(): string {
-  return process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+  // A `-latest` alias, not a pinned version — checked live against a real
+  // free-tier Gemini key while building this: `gemini-2.5-flash` 404s as
+  // retired for new API keys, and `gemini-2.0-flash` is a real model but
+  // carries zero free-tier quota on that same key. Both alias names
+  // answered. A pinned id is safer against Google silently changing what
+  // "latest" means later, but only once this has a paid-tier key to verify
+  // it against — the untested guess is exactly the failure mode this
+  // deployment already hit twice.
+  return process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 }
 
 /**
@@ -409,6 +417,19 @@ async function askGemini(request: AiRequest): Promise<AiResult> {
     contents: [{ role: "user", parts }],
     config: {
       maxOutputTokens: request.maxTokens,
+      // Every AI-shaped touchpoint in Atlas is a bounded, structured read —
+      // pick a tool, draft a short sentence from figures already computed —
+      // never open-ended reasoning. Without this, a newer Gemini model's own
+      // internal "thinking" tokens are drawn from the same maxOutputTokens
+      // budget as the actual answer: caught live building this, where a
+      // 20-token ceiling produced 16 (then 47, at thinkingBudget: 1) tokens
+      // of hidden thought and zero answer, reported as a clean MAX_TOKENS
+      // truncation with nothing to show for it. thinkingBudget: 0 is
+      // rejected outright as an invalid argument on this model family — it
+      // isn't optional, only reducible — so thinkingLevel is the actual
+      // lever, confirmed live to answer directly with none of the budget
+      // spent on thought.
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       ...(request.system ? { systemInstruction: request.system } : {}),
       ...(request.timeoutMs ? { httpOptions: { timeout: request.timeoutMs } } : {}),
       ...(request.tool
